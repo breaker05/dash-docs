@@ -35,6 +35,7 @@ export default async function EditPage({
         path: page.path,
         isHome: page.isHome,
         icon: page.icon,
+        pdfChrome: page.pdfChrome,
         visibility: page.visibility,
         effectiveVisibility: page.effectiveVisibility,
         published: page.publishedContentMd !== null,

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
-import { ExternalLink, Tags, Users } from "lucide-react";
+import { ExternalLink, Settings, Tags, Users } from "lucide-react";
 
 function toItems(nodes: TreeNode[]): TreeItem[] {
   return nodes.map((n) => ({
@@ -103,12 +103,20 @@ export default async function AdminLayout({
             <Tags className="size-4" /> Feature tags
           </Link>
           {session.user.role === "admin" && (
-            <Link
-              href="/admin/users"
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <Users className="size-4" /> Team
-            </Link>
+            <>
+              <Link
+                href="/admin/users"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Users className="size-4" /> Team
+              </Link>
+              <Link
+                href="/admin/settings"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Settings className="size-4" /> Settings
+              </Link>
+            </>
           )}
         </div>
 

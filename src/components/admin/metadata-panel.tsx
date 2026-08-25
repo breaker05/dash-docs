@@ -13,6 +13,7 @@ import {
 import { publishAction, unpublishAction } from "@/server/actions/publish";
 import { saveVersionAction } from "@/server/actions/revisions";
 import { setPageTagsAction } from "@/server/actions/tags";
+import { setPdfChromeAction } from "@/server/actions/settings";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -46,6 +47,7 @@ export type PageMeta = {
   path: string;
   isHome: boolean;
   icon: string | null;
+  pdfChrome: boolean;
   visibility: "public" | "internal";
   effectiveVisibility: "public" | "internal";
   published: boolean;
@@ -148,6 +150,30 @@ export function MetadataPanel({
         >
           Download draft as PDF
         </a>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={page.pdfChrome}
+            disabled={pending}
+            onChange={(e) => {
+              const next = e.target.checked;
+              startTransition(async () => {
+                try {
+                  await setPdfChromeAction({
+                    pageId: page.id,
+                    pdfChrome: next,
+                  });
+                } catch (err) {
+                  toast.error(
+                    err instanceof Error ? err.message : "Update failed",
+                  );
+                }
+              });
+            }}
+            className="size-3.5 accent-[var(--primary)]"
+          />
+          Default PDF header/footer
+        </label>
       </div>
 
       <NewPageButton

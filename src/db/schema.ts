@@ -101,6 +101,8 @@ export const pages = pgTable(
       .default("public"),
     // lucide icon name from the curated set in src/lib/page-icons.tsx
     icon: text("icon"),
+    // apply the site-default PDF header/footer (admin settings) on export
+    pdfChrome: boolean("pdf_chrome").notNull().default(true),
     // internal if this page or any ancestor is internal; recomputed on move /
     // visibility change in the same transaction that recomputes `path`
     effectiveVisibility: text("effective_visibility", {
@@ -198,6 +200,15 @@ export const redirects = pgTable("redirect", {
     .notNull()
     .references(() => pages.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const settings = pgTable("setting", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedBy: text("updated_by").references(() => users.id),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });

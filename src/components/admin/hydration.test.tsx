@@ -29,6 +29,10 @@ vi.mock("@/server/actions/tags", () => ({
   renameTagAction: vi.fn(),
   deleteTagAction: vi.fn(),
 }));
+vi.mock("@/server/actions/settings", () => ({
+  updatePdfSettingsAction: vi.fn(),
+  setPdfChromeAction: vi.fn(),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/pages/p1",
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
@@ -73,6 +77,7 @@ const editorPage = {
   path: "guides",
   isHome: false,
   icon: null,
+  pdfChrome: true,
   visibility: "public" as const,
   effectiveVisibility: "public" as const,
   published: true,

@@ -4,6 +4,9 @@ import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { launchBrowser } from "@/lib/pdf/browser";
 import { renderPdfHtml } from "@/lib/pdf/render-html";
+import { buildPdfTemplate, defaultFooterTemplate } from "@/lib/pdf/chrome";
+import { getSettings, PDF_FOOTER_KEY, PDF_HEADER_KEY } from "@/server/settings";
+import { siteUrl } from "@/lib/site-url";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -44,6 +47,18 @@ export async function GET(
 
   const html = renderPdfHtml({ title, markdown });
 
+  // site-default header/footer, unless the page opted out
+  const chrome = page.pdfChrome
+    ? await getSettings(db, [PDF_HEADER_KEY, PDF_FOOTER_KEY])
+    : {};
+  const templateCtx = { title, url: `${siteUrl()}/${page.path}` };
+  const headerTemplate = chrome[PDF_HEADER_KEY]
+    ? buildPdfTemplate(chrome[PDF_HEADER_KEY], templateCtx)
+    : "<span></span>";
+  const footerTemplate = chrome[PDF_FOOTER_KEY]
+    ? buildPdfTemplate(chrome[PDF_FOOTER_KEY], templateCtx)
+    : defaultFooterTemplate(title);
+
   const browser = await launchBrowser();
   try {
     const browserPage = await browser.newPage();
@@ -67,14 +82,15 @@ export async function GET(
     const pdf = await browserPage.pdf({
       format: "letter",
       printBackground: true,
-      margin: { top: "0.75in", bottom: "0.9in", left: "0.75in", right: "0.75in" },
+      margin: {
+        top: chrome[PDF_HEADER_KEY] ? "0.9in" : "0.75in",
+        bottom: "0.9in",
+        left: "0.75in",
+        right: "0.75in",
+      },
       displayHeaderFooter: true,
-      headerTemplate: "<span></span>",
-      footerTemplate: `
-        <div style="width: 100%; font-size: 8px; color: #71717a; padding: 0 0.75in; display: flex; justify-content: space-between;">
-          <span>${title.replace(/</g, "&lt;")} — Dash Marketing Docs</span>
-          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-        </div>`,
+      headerTemplate,
+      footerTemplate,
     });
 
     return new Response(new Uint8Array(pdf), {

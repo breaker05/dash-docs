@@ -15,6 +15,13 @@
       "when": 1787622732417,
       "tag": "0001_sparkling_mongoose",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787690358500,
+      "tag": "0002_lively_shaman",
+      "breakpoints": true
     }
   ]
 }
