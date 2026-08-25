@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
+import { siteUrl } from "@/lib/site-url";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function GET(
     if (!session?.user) return new Response("Not found", { status: 404 });
   }
 
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.dashmarketing.io";
+  const site = siteUrl();
   const body = `# ${page.publishedTitle}\n\nSource: ${site}/${page.path}\n\n${page.publishedContentMd}\n`;
   return new Response(body, {
     headers: {

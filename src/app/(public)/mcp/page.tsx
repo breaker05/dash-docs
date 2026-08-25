@@ -1,5 +1,6 @@
 import { Bot, FileCode, ListTree, Search, Sparkles } from "lucide-react";
 import { CopyButton } from "@/components/public/copy-button";
+import { siteUrl } from "@/lib/site-url";
 
 export const metadata = {
   title: "Connect an AI assistant — Dash Marketing Docs",
@@ -43,7 +44,7 @@ const TOOLS = [
 ];
 
 export default function McpPage() {
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.dashmarketing.io";
+  const site = siteUrl();
   const endpoint = `${site}/api/mcp`;
 
   return (

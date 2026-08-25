@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { siteUrl } from "@/lib/site-url";
 
 export default function robots(): MetadataRoute.Robots {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.dashmarketing.io";
+  const base = siteUrl();
   return {
     rules: [{ userAgent: "*", allow: "/", disallow: ["/admin", "/api"] }],
     sitemap: `${base}/sitemap.xml`,

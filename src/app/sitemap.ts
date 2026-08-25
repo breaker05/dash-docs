@@ -2,11 +2,12 @@ import type { MetadataRoute } from "next";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
+import { siteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.dashmarketing.io";
+  const base = siteUrl();
   // public published pages only — internal pages are never listed
   const rows = await db
     .select({ path: pages.path, isHome: pages.isHome, publishedAt: pages.publishedAt })

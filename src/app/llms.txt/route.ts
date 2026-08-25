@@ -2,6 +2,8 @@ import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 
+import { siteUrl } from "@/lib/site-url";
+
 export const runtime = "nodejs";
 
 /**
@@ -9,7 +11,7 @@ export const runtime = "nodejs";
  * Lists every published public page with a link to its raw markdown.
  */
 export async function GET() {
-  const site = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.dashmarketing.io";
+  const site = siteUrl();
   const rows = await db
     .select({
       title: pages.publishedTitle,
