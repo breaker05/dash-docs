@@ -1,0 +1,390 @@
+{
+  "info": {
+    "_postman_id": "c5e8d3a2-4f8b-4e7d-9b6e-1a2c3d4e5f6a",
+    "name": "Dash Customer Import API",
+    "description": "Postman collection for the Dash Marketing Customer Import API.\n\n**Reference docs:** [CUSTOMER_IMPORT_API.md](./CUSTOMER_IMPORT_API.md)\n\n---\n\n## Quick start\n\n1. Open the collection **Variables** tab and set `apiKey` to your key. Optionally update `baseUrl` (defaults to production).\n2. Run **`1. Discover Locations → List locations`** — its test script captures the first location into `locationUuid`.\n3. Run **`2. Onboard Accounts → Submit accounts`** — captures `referenceUuid` and `accountTPReferenceId`.\n4. Run any other request under **`3.`–`5.`** to exercise the rest of the surface.\n\n## Replay safety\n\nAll dedup keys (`transactionId`, `tpReferenceId`) use Postman dynamic variables (`{{$randomUUID}}`), so each Send creates a fresh record. To verify the duplicate-detection path (`status: 3 Skipped`), replace one of the dynamic IDs with a static string and Send twice.\n\n## What's included\n\n| Folder | Endpoint | What it does |\n|--------|----------|--------------|\n| 1. Discover Locations | `GET /integrations/locations` | Lists your locations; auto-saves first uuid |\n| 2. Onboard Accounts | `POST /integrations/accounts` | Submits 2 sample accounts |\n| 3. Onboard Subscriptions | `POST /integrations/subscriptions` | Submits 1 sample subscription against a previously onboarded account |\n| 4. Submit Transactions | `POST /integrations/transactions` | Two requests: a single bootstrap with full nested graph, and a 3-record mixed batch |\n| 5. Read Past Imports | `GET /integrations/imports`, `GET /integrations/imports/{referenceUuid}` | Lists run history and replays a prior result |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-KEY", "type": "string" },
+      { "key": "value", "value": "{{apiKey}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Light sanity check before any request runs.",
+          "const apiKey = pm.collectionVariables.get('apiKey');",
+          "if (!apiKey || apiKey === 'your_api_key_here') {",
+          "    console.warn('apiKey is not set. Open the collection Variables tab and set it before sending requests.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://api.dashmarketing.io",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "your_api_key_here",
+      "type": "string"
+    },
+    {
+      "key": "locationUuid",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "referenceUuid",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accountTPReferenceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subscriptionTPReferenceId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Discover Locations",
+      "item": [
+        {
+          "name": "List locations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body && Array.isArray(body.data) && body.data.length > 0) {",
+                  "    const first = body.data[0];",
+                  "    pm.collectionVariables.set('locationUuid', first.uuid);",
+                  "    console.log('Saved locationUuid =', first.uuid, '(' + first.name + ', ' + first.timeZone + ')');",
+                  "} else {",
+                  "    console.warn('No locations returned. Onboard at least one location in Dash before submitting transactions.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/integrations/locations?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "locations"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" },
+                { "key": "query", "value": "", "disabled": true }
+              ]
+            },
+            "description": "Returns up to 20 of your locations. The test script saves the first location's `uuid` into the `locationUuid` collection variable so subsequent requests can use it.\n\nIf you have many locations, use `query` to filter by name/address/city. `pageSize` is clamped to 1–500."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Onboard Accounts",
+      "item": [
+        {
+          "name": "Submit accounts (2 records)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Generate one stable tpReferenceId for the first account so we can reference",
+                  "// it from the subscription and transaction requests later in the run.",
+                  "const ref = 'POSTMAN-ACME-' + pm.variables.replaceIn('{{$randomUUID}}');",
+                  "pm.collectionVariables.set('accountTPReferenceId', ref);",
+                  "pm.variables.set('account1Ref', ref);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "",
+                  "const body = pm.response.json();",
+                  "if (body && body.referenceUuid) {",
+                  "    pm.collectionVariables.set('referenceUuid', body.referenceUuid);",
+                  "    console.log('Saved referenceUuid =', body.referenceUuid);",
+                  "}",
+                  "console.log('Submitted:', body && body.totalSubmitted, ' Created:', body && body.successCount, ' Skipped:', body && body.skippedCount, ' Failed:', body && body.failedCount);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"accounts\": [\n        {\n            \"tpReferenceId\": \"{{account1Ref}}\",\n            \"name\": \"Acme Corp\",\n            \"accountNumber\": \"ACME-001\",\n            \"type\": 1,\n            \"isActive\": true,\n            \"contactName\": \"Billing Dept\",\n            \"contactEmail\": \"billing@acme.example\",\n            \"contactPhoneNumber\": \"+15551234567\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"metadata\": {\n                \"region\": \"northeast\"\n            }\n        },\n        {\n            \"tpReferenceId\": \"POSTMAN-WIDGETS-{{$randomUUID}}\",\n            \"name\": \"Widgets LLC\",\n            \"type\": 1,\n            \"contactEmail\": \"ap@widgets.example\"\n        }\n    ],\n    \"metadata\": {\n        \"source\": \"postman-collection\",\n        \"scenario\": \"onboard-accounts\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/integrations/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "accounts"]
+            },
+            "description": "Submits two monthly-billing accounts. The first account's `tpReferenceId` is saved to `accountTPReferenceId` so the subscription and transaction requests below can resolve it.\n\n**Field reference:**\n- `type`: `1` Monthly, `2` Flex, `3` Reservation\n- `tpReferenceId` is the dedup key — replays return `Skipped` with the existing UUID.\n- `locationUuid` on an account is optional; remove it if you don't want to attach the account to a primary location."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Onboard Subscriptions",
+      "item": [
+        {
+          "name": "Submit subscription (1 record)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const ref = 'POSTMAN-PERMIT-' + pm.variables.replaceIn('{{$randomUUID}}');",
+                  "pm.collectionVariables.set('subscriptionTPReferenceId', ref);",
+                  "pm.variables.set('sub1Ref', ref);",
+                  "",
+                  "const acct = pm.collectionVariables.get('accountTPReferenceId');",
+                  "if (!acct) {",
+                  "    console.warn('accountTPReferenceId is empty. Run \"Submit accounts\" first, or hardcode an existing accountTPReferenceId in the body.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && body.referenceUuid) {",
+                  "    pm.collectionVariables.set('referenceUuid', body.referenceUuid);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"subscriptions\": [\n        {\n            \"tpReferenceId\": \"{{sub1Ref}}\",\n            \"accountTPReferenceId\": \"{{accountTPReferenceId}}\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"permitNumber\": \"P001\",\n            \"status\": 1,\n            \"permitType\": \"reserved\",\n            \"numberOfSpaces\": 1,\n            \"startDate\": \"2026-04-01T00:00:00Z\",\n            \"currentBaseRate\": 250.00,\n            \"currentRate\": 250.00,\n            \"currentTax\": 0.00,\n            \"currentFeeTotal\": 0.00\n        }\n    ],\n    \"metadata\": {\n        \"source\": \"postman-collection\",\n        \"scenario\": \"onboard-subscription\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/integrations/subscriptions",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "subscriptions"]
+            },
+            "description": "Submits one subscription/permit attached to the account onboarded in step 2.\n\n**Note:** the standalone subscription endpoint does **not** create accounts inline. The subscription must resolve to an existing account via either `accountUuid` or `accountTPReferenceId`, otherwise the record returns `Failed` with `reasonCode: 6 (AccountNotFound)`.\n\n**Field reference:**\n- `status`: `1` Active, `2` Suspended, `3` Cancelled, `4` PendingApproval, `5` Expired"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Submit Transactions",
+      "item": [
+        {
+          "name": "Bootstrap (full nested graph, 1 record)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && body.referenceUuid) {",
+                  "    pm.collectionVariables.set('referenceUuid', body.referenceUuid);",
+                  "}",
+                  "if (body && body.createdEntities) {",
+                  "    console.log('Created entities:', JSON.stringify(body.createdEntities));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"transactions\": [\n        {\n            \"transactionId\": \"POSTMAN-TXN-{{$randomUUID}}\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"type\": 2,\n            \"bookingSource\": 6,\n            \"transactionDate\": \"2026-04-27T18:30:00Z\",\n            \"amountTotal\": 250.00,\n            \"netAmount\": 235.00,\n            \"convenienceFee\": 10.00,\n            \"processingFee\": 5.00,\n            \"account\": {\n                \"tpReferenceId\": \"POSTMAN-BOOTSTRAP-ACCT-{{$randomUUID}}\",\n                \"name\": \"Bootstrap Test Co\",\n                \"type\": 1,\n                \"contactEmail\": \"billing@bootstrap.example\"\n            },\n            \"contact\": {\n                \"email\": \"jane.doe@example.com\",\n                \"firstName\": \"Jane\",\n                \"lastName\": \"Doe\",\n                \"phoneNumber\": \"+15555550100\"\n            },\n            \"vehicle\": {\n                \"licensePlate\": \"BOOT-{{$randomInt}}\",\n                \"state\": \"NY\",\n                \"make\": \"Honda\",\n                \"model\": \"Civic\",\n                \"color\": \"Blue\"\n            },\n            \"subscription\": {\n                \"tpReferenceId\": \"POSTMAN-BOOTSTRAP-PERMIT-{{$randomUUID}}\",\n                \"permitNumber\": \"P-BOOT\",\n                \"status\": 1,\n                \"startDate\": \"2026-04-01T00:00:00Z\",\n                \"currentBaseRate\": 250.00,\n                \"currentRate\": 250.00,\n                \"numberOfSpaces\": 1\n            }\n        }\n    ],\n    \"metadata\": {\n        \"source\": \"postman-collection\",\n        \"scenario\": \"bootstrap\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/integrations/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "transactions"]
+            },
+            "description": "End-to-end smoke test. A single transaction creates an account, contact, vehicle, and subscription inline, all in one request. Useful as a first connectivity check.\n\nOn success, `createdEntities` in the response shows how many of each related entity were newly created (typically 1 of each on first run; 0 of each on a replay because of dedup).\n\n**Field reference:**\n- `type`: `1` Transient, `2` Monthly, `3` Flex, `4` Reservation\n- `bookingSource`: `6` (CustomerApi) is the conventional value for backend imports; you can omit this field and the default is applied."
+          },
+          "response": []
+        },
+        {
+          "name": "Mixed batch (3 records)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && body.referenceUuid) {",
+                  "    pm.collectionVariables.set('referenceUuid', body.referenceUuid);",
+                  "}",
+                  "if (body && Array.isArray(body.results)) {",
+                  "    body.results.forEach(r => console.log(r.reference, '→ status:', r.status, r.uuid || '', r.errorDetail || ''));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"transactions\": [\n        {\n            \"transactionId\": \"POSTMAN-TXN-{{$randomUUID}}\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"type\": 1,\n            \"transactionDate\": \"2026-04-27T18:30:00Z\",\n            \"amountTotal\": 12.50,\n            \"netAmount\": 11.40,\n            \"convenienceFee\": 0.85,\n            \"processingFee\": 0.25,\n            \"cardType\": \"Visa\",\n            \"contact\": {\n                \"email\": \"driver1@example.com\",\n                \"firstName\": \"John\",\n                \"lastName\": \"Smith\"\n            },\n            \"vehicle\": {\n                \"licensePlate\": \"ABC1234\",\n                \"state\": \"NY\"\n            }\n        },\n        {\n            \"transactionId\": \"POSTMAN-TXN-{{$randomUUID}}\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"type\": 1,\n            \"transactionDate\": \"2026-04-27T19:00:00Z\",\n            \"amountTotal\": 8.00,\n            \"netAmount\": 7.30,\n            \"convenienceFee\": 0.50,\n            \"processingFee\": 0.20,\n            \"vehicle\": {\n                \"licensePlate\": \"XYZ9876\",\n                \"state\": \"NJ\"\n            }\n        },\n        {\n            \"transactionId\": \"POSTMAN-TXN-{{$randomUUID}}\",\n            \"locationUuid\": \"{{locationUuid}}\",\n            \"type\": 2,\n            \"transactionDate\": \"2026-04-27T08:15:00Z\",\n            \"amountTotal\": 250.00,\n            \"netAmount\": 235.00,\n            \"convenienceFee\": 10.00,\n            \"processingFee\": 5.00,\n            \"accountTPReferenceId\": \"{{accountTPReferenceId}}\",\n            \"subscriptionTPReferenceId\": \"{{subscriptionTPReferenceId}}\"\n        }\n    ],\n    \"metadata\": {\n        \"source\": \"postman-collection\",\n        \"scenario\": \"mixed-batch\"\n    }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/integrations/transactions",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "transactions"]
+            },
+            "description": "A representative batch demonstrating each resolution strategy:\n\n1. **Inline contact + vehicle** — both created on first run, deduped against email/plate on replay.\n2. **Vehicle-only, no contact** — minimal anonymous transient transaction.\n3. **Resolve account/subscription by external reference** — uses `accountTPReferenceId` and `subscriptionTPReferenceId` from steps 2 and 3.\n\nThe test script logs each per-record outcome to the Postman console for easy inspection."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Read Past Imports",
+      "item": [
+        {
+          "name": "List recent imports",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && Array.isArray(body.data) && body.data.length > 0) {",
+                  "    pm.collectionVariables.set('referenceUuid', body.data[0].referenceUuid);",
+                  "    console.log('Most recent run:', body.data[0].referenceUuid, '(', body.data[0].resource, body.data[0].status, ')');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/integrations/imports?page=1&pageSize=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "imports"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "pageSize", "value": "20" }
+              ]
+            },
+            "description": "Paginated history of imports across all three resources, most recent first. Saves the most recent `referenceUuid` so the request below can be sent immediately."
+          },
+          "response": []
+        },
+        {
+          "name": "Get import by referenceUuid",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "if (body && Array.isArray(body.results)) {",
+                  "    console.log('Run', body.referenceUuid, '— totalSubmitted:', body.totalSubmitted, ' results:', body.results.length);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/integrations/imports/{{referenceUuid}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["integrations", "imports", "{{referenceUuid}}"]
+            },
+            "description": "Returns the full per-record results for a prior import run. Returns `404` if the `referenceUuid` doesn't belong to your organization.\n\nThe `referenceUuid` collection variable is populated by every POST request and by `List recent imports`, so this request is sendable immediately after any of those run."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

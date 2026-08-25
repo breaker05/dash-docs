@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+<style>*{margin:0;padding:0;box-sizing:border-box}img{max-width:100%}</style>
+<title>Dash Platform — Security Overview</title>
+<style>
+  :root {
+    --bg: #eef1f3;
+    --surface: #ffffff;
+    --surface-2: #f6f8f9;
+    --ink: #0f1720;
+    --body: #3a464f;
+    --muted: #66727b;
+    --line: #e0e6e9;
+    --line-strong: #cdd6da;
+    --accent: #0a6f6a;
+    --accent-ink: #084b47;
+    --accent-soft: #e2f0ee;
+    --good: #2f7d58;
+    --good-soft: #e3f0e9;
+    --amber: #9a6b16;
+    --amber-soft: #f5ecd8;
+    --shadow: 0 1px 2px rgba(15,23,32,.04), 0 8px 24px -12px rgba(15,23,32,.12);
+    --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0a0f14;
+      --surface: #121a21;
+      --surface-2: #0e161d;
+      --ink: #e9eff2;
+      --body: #aab6be;
+      --muted: #7b8891;
+      --line: #222d35;
+      --line-strong: #2e3b44;
+      --accent: #34c3b9;
+      --accent-ink: #6fd6ce;
+      --accent-soft: #10312c;
+      --good: #52b585;
+      --good-soft: #12291f;
+      --amber: #cf9b46;
+      --amber-soft: #2a2416;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eef1f3; --surface: #ffffff; --surface-2: #f6f8f9; --ink: #0f1720;
+    --body: #3a464f; --muted: #66727b; --line: #e0e6e9; --line-strong: #cdd6da;
+    --accent: #0a6f6a; --accent-ink: #084b47; --accent-soft: #e2f0ee;
+    --good: #2f7d58; --good-soft: #e3f0e9; --amber: #9a6b16; --amber-soft: #f5ecd8;
+    --shadow: 0 1px 2px rgba(15,23,32,.04), 0 8px 24px -12px rgba(15,23,32,.12);
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0f14; --surface: #121a21; --surface-2: #0e161d; --ink: #e9eff2;
+    --body: #aab6be; --muted: #7b8891; --line: #222d35; --line-strong: #2e3b44;
+    --accent: #34c3b9; --accent-ink: #6fd6ce; --accent-soft: #10312c;
+    --good: #52b585; --good-soft: #12291f; --amber: #cf9b46; --amber-soft: #2a2416;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -14px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--body);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---- Masthead ---- */
+  .masthead {
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(120% 140% at 100% 0%, var(--accent-soft) 0%, transparent 55%),
+      var(--surface);
+  }
+  .masthead-inner { padding: 40px 24px 34px; max-width: 940px; margin: 0 auto; }
+  .brandrow { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 680; color: var(--ink); letter-spacing: -.01em; font-size: 15px; }
+  .brand .glyph {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(150deg, var(--accent), var(--accent-ink));
+    display: grid; place-items: center; color: #fff; flex: none;
+  }
+  .brand .glyph svg { width: 15px; height: 15px; }
+  .classification {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent-ink); background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    padding: 5px 10px; border-radius: 6px; white-space: nowrap;
+  }
+  h1 {
+    color: var(--ink); font-size: clamp(30px, 5.2vw, 46px); line-height: 1.05;
+    letter-spacing: -.03em; font-weight: 720; margin: 26px 0 10px; text-wrap: balance; max-width: 18ch;
+  }
+  .lede { font-size: 18px; max-width: 62ch; margin: 0 0 22px; }
+  .metaline {
+    display: flex; flex-wrap: wrap; gap: 8px 26px; font-family: var(--mono);
+    font-size: 12.5px; color: var(--muted); padding-top: 18px; border-top: 1px solid var(--line);
+  }
+  .metaline b { color: var(--body); font-weight: 600; }
+
+  /* ---- Layout ---- */
+  main { padding: 44px 0 30px; }
+  section { scroll-margin-top: 20px; }
+  section + section { margin-top: 44px; }
+
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600; display: flex; align-items: center; gap: 10px; margin: 0 0 6px;
+  }
+  .eyebrow::before { content: ""; width: 22px; height: 2px; background: var(--accent); border-radius: 2px; }
+  h2 { color: var(--ink); font-size: 25px; letter-spacing: -.02em; font-weight: 680; margin: 0 0 4px; }
+  h3 { color: var(--ink); font-size: 15px; letter-spacing: .01em; font-weight: 660; margin: 26px 0 12px; text-transform: none; }
+  .section-note { color: var(--muted); font-size: 15px; max-width: 66ch; margin: 0 0 18px; }
+
+  /* ---- Callout ---- */
+  .callout {
+    display: flex; gap: 14px; background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); border-radius: 10px; padding: 18px 20px; box-shadow: var(--shadow);
+    margin-top:15px;
+  }
+  .callout svg { width: 20px; height: 20px; color: var(--accent); flex: none; margin-top: 2px; }
+  .callout p { margin: 0; font-size: 14.5px; }
+  .callout a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 2px; }
+
+  /* ---- At a glance grid ---- */
+  .glance { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 6px; }
+  .glance .cell {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 15px 17px; box-shadow: var(--shadow);
+  }
+  .glance .k { font-family: var(--mono); font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); margin-bottom: 5px; }
+  .glance .v { color: var(--ink); font-weight: 560; font-size: 14.5px; line-height: 1.45; }
+
+  /* ---- Control tables ---- */
+  .ctrl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); background: var(--surface); }
+  table.ctrl { width: 100%; border-collapse: collapse; min-width: 560px; }
+  table.ctrl th {
+    text-align: left; font-family: var(--mono); font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding: 12px 18px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  }
+  table.ctrl td { padding: 15px 18px; border-bottom: 1px solid var(--line); vertical-align: top; font-size: 14.5px; }
+  table.ctrl tr:last-child td { border-bottom: none; }
+  table.ctrl tr:hover td { background: color-mix(in srgb, var(--accent-soft) 40%, transparent); }
+  .cid { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); font-weight: 600; white-space: nowrap; }
+  .ctitle { color: var(--ink); font-weight: 620; display: block; margin-bottom: 3px; }
+  .cdesc { color: var(--body); font-size: 13.5px; line-height: 1.5; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+    font-size: 11px; letter-spacing: .03em; font-weight: 600; padding: 4px 10px; border-radius: 20px; white-space: nowrap;
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; }
+  .pill.ok { background: var(--good-soft); color: var(--good); }
+  .pill.ok::before { background: var(--good); }
+  .pill.info { background: var(--accent-soft); color: var(--accent-ink); }
+  .pill.info::before { background: var(--accent); }
+  .pill.cfg { background: var(--amber-soft); color: var(--amber); }
+  .pill.cfg::before { background: var(--amber); }
+
+  /* ---- Responsibility ---- */
+  .resp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .resp .card { background: var(--surface); border: 1px solid var(--line); border-radius: 11px; padding: 18px 20px; box-shadow: var(--shadow); }
+  .resp h4 { margin: 0 0 8px; color: var(--ink); font-size: 14px; display: flex; align-items: center; gap: 8px; }
+  .resp h4 svg { width: 16px; height: 16px; color: var(--accent); }
+  .resp p { margin: 0; font-size: 14px; }
+
+  /* ---- Footer ---- */
+  footer { border-top: 1px solid var(--line); margin-top: 50px; padding: 30px 0 46px; }
+  footer .contact { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow); margin-top:18px }
+  footer .contact strong { color: var(--ink); }
+  footer .fine { color: var(--muted); font-size: 12.5px; margin: 18px auto; max-width: 90%; }
+  footer a { color: var(--accent-ink); }
+
+  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
+
+  @media (max-width: 620px) {
+    .glance, .resp { grid-template-columns: 1fr; }
+    .masthead-inner { padding: 30px 20px 26px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="brandrow">
+      <div class="brand">
+        <span class="glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+        </span>
+        Dash Core Platform
+      </div>
+      <span class="classification">Confidential · Customer Review</span>
+    </div>
+    <h1>Security Overview</h1>
+    <p class="lede">Our technical and organizational security controls, mapped to the SOC&nbsp;2 Trust Services Criteria for vendor-risk review.</p>
+    <div class="metaline">
+      <span>VERSION <b>1.0</b></span>
+      <span>REVIEWED <b>2026-07-15</b></span>
+      <span>OWNER <b>Chris Keenan</b></span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="reveal">
+    <div class="callout">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <p>This is a self-assessment of our current control environment, not an independent audit report. We use <a href="https://www.vanta.com">Vanta</a> for continuous control monitoring and are formalizing our controls under the SOC&nbsp;2 framework. We are glad to complete your security questionnaire, share additional evidence under NDA, and provide our audit report when available.</p>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">At a glance</p>
+    <h2>Control environment summary</h2>
+    <div class="glance" style="margin-top:16px">
+      <div class="cell"><div class="k">Identity provider</div><div class="v">Clerk — managed IdP, OIDC / JWT authentication</div></div>
+      <div class="cell"><div class="k">Access model</div><div class="v">RBAC with per-scope data grants, least-privilege defaults</div></div>
+      <div class="cell"><div class="k">Hosting</div><div class="v">Amazon Web Services (US region)</div></div>
+      <div class="cell"><div class="k">Data in transit</div><div class="v">TLS enforced · HTTPS redirection · secure, strict cookies</div></div>
+      <div class="cell"><div class="k">Data stores</div><div class="v">PostgreSQL (primary + replica), Redis (TLS), Amazon S3</div></div>
+      <div class="cell"><div class="k">PII handling</div><div class="v">Server-side field masking for lower-privilege callers</div></div>
+      <div class="cell"><div class="k">Audit trail</div><div class="v">Actor-attributed, append-only log of sensitive changes</div></div>
+      <div class="cell"><div class="k">Change control</div><div class="v">Peer + automated review, CI-enforced authorization tests</div></div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">TSC · Security</p>
+    <h2>Security (Common Criteria)</h2>
+    <p class="section-note">Authorization is enforced in depth. Every request passes through a global, fail-closed authorization pipeline before it can reach application logic.</p>
+
+    <h3>Access control &amp; authorization</h3>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">AC-01</td><td><span class="ctitle">Deny-by-default policy</span><span class="cdesc">A global fallback policy requires an authenticated principal with an appropriate organizational role on every endpoint; endpoints must explicitly opt in to broader access.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-02</td><td><span class="ctitle">Three-tier principal model</span><span class="cdesc">Callers are classified as platform admin, organization member, or client tier — derived server-side from validated identity claims, never from client input.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-03</td><td><span class="ctitle">Role-based access control</span><span class="cdesc">Users hold role-per-grant assignments (Admin / Editor / Read-Only / Analyst, or org-custom roles) mapped to a granular permission set.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-04</td><td><span class="ctitle">Scoped data grants</span><span class="cdesc">Access is constrained to specific organizations, clients, locations, or cities. Effective scope is the union of grants intersected with tier — enforced at the query layer, not just the UI.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-05</td><td><span class="ctitle">Write-permission guard</span><span class="cdesc">A global filter denies all state-changing requests for read-only principals, independent of per-endpoint checks.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-06</td><td><span class="ctitle">Least privilege &amp; safeguards</span><span class="cdesc">Per-user grant caps and last-administrator protection prevent privilege sprawl and accidental lockout.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-07</td><td><span class="ctitle">Controlled impersonation</span><span class="cdesc">Support/admin impersonation is validated per request and can only narrow, never widen, data scope. All impersonated actions are attributed to the real actor.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AC-08</td><td><span class="ctitle">Authorization regression tests</span><span class="cdesc">Snapshot tests fail the build if any endpoint's anonymous, client-allowed, or permission-gated surface changes without an explicit, reviewed update.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Authentication</h3>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">AU-01</td><td><span class="ctitle">Managed identity provider</span><span class="cdesc">Authentication is delegated to Clerk. The application validates issuer, token lifetime, and cryptographic signature on every request.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AU-02</td><td><span class="ctitle">Multi-factor authentication</span><span class="cdesc">MFA is available through our identity provider. Enforcement posture is configurable per organization.</span></td><td><span class="pill info">Available</span></td></tr>
+          <tr><td class="cid">AU-03</td><td><span class="ctitle">API key security</span><span class="cdesc">Machine keys are generated from a cryptographically secure source, stored only as a one-way hash, and support expiry, revocation, and per-key scoping. Only a non-sensitive prefix and last-four are retained.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AU-04</td><td><span class="ctitle">Key usage tracking</span><span class="cdesc">Last-used timestamp and source IP are recorded per key to support anomaly detection and rotation.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Change management &amp; secure SDLC</h3>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">CM-01</td><td><span class="ctitle">Peer + automated code review</span><span class="cdesc">Changes are reviewed before merge, including an automated review pass in CI.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CM-02</td><td><span class="ctitle">Controlled deployments</span><span class="cdesc">Deployments run through per-service CI/CD pipelines; schema changes go through a dedicated, reviewed migration pipeline.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CM-03</td><td><span class="ctitle">Pre-commit quality gates</span><span class="cdesc">Formatting, linting, and build checks run before code is pushed.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CM-04</td><td><span class="ctitle">Environment isolation</span><span class="cdesc">Production configuration and secrets are kept out of source control and injected at runtime via environment configuration and the CI/CD secret store.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Monitoring &amp; logging</h3>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">MO-01</td><td><span class="ctitle">Centralized structured logging</span><span class="cdesc">All services emit structured logs enriched with request context to Datadog.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">MO-02</td><td><span class="ctitle">Severity-mapped request logging</span><span class="cdesc">Server errors, client errors, and health probes are classified for alerting and triage.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">MO-03</td><td><span class="ctitle">Reduced attack surface</span><span class="cdesc">Interactive API documentation is disabled in production; internal endpoints are not publicly exposed.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">MO-04</td><td><span class="ctitle">Origin controls</span><span class="cdesc">Cross-origin requests are restricted to an explicit allowlist of trusted origins.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">TSC · Availability</p>
+    <h2>Availability</h2>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">AV-01</td><td><span class="ctitle">Managed cloud infrastructure</span><span class="cdesc">Hosted on AWS, leveraging managed database, cache, object storage, and queue services.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AV-02</td><td><span class="ctitle">Read-replica architecture</span><span class="cdesc">Read-heavy analytics traffic is served from a dedicated PostgreSQL read replica, isolating it from primary write workloads.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AV-03</td><td><span class="ctitle">Resilient integrations</span><span class="cdesc">Outbound vendor calls use retry with backoff and circuit breakers to contain third-party failures.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">AV-04</td><td><span class="ctitle">Caching layer</span><span class="cdesc">A TLS-secured Redis cache absorbs load on frequently read data.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">TSC · Confidentiality</p>
+    <h2>Confidentiality</h2>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">CF-01</td><td><span class="ctitle">Encryption in transit</span><span class="cdesc">TLS is enforced end to end; HTTP is redirected to HTTPS; session cookies are Secure, HttpOnly, and SameSite=Strict.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CF-02</td><td><span class="ctitle">Encryption at rest</span><span class="cdesc">Data stores run on AWS managed services with encryption at rest.</span></td><td><span class="pill info">Infrastructure</span></td></tr>
+          <tr><td class="cid">CF-03</td><td><span class="ctitle">Field-level PII masking</span><span class="cdesc">PII (email, name, phone, notes, and similar) is masked server-side before being returned to client-tier callers or users lacking PII-view permission. Enforced in the data-mapping layer, not left to callers.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CF-04</td><td><span class="ctitle">Scope enforcement at the query layer</span><span class="cdesc">Confidential records are filtered to the caller's authorized scope in the database query itself, preventing cross-tenant over-fetching.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">CF-05</td><td><span class="ctitle">Secrets handling</span><span class="cdesc">Runtime secrets are supplied through environment configuration and the CI/CD secret store rather than embedded in application code paths.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">TSC · Processing Integrity</p>
+    <h2>Processing Integrity</h2>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">PI-01</td><td><span class="ctitle">Append-only audit log</span><span class="cdesc">Sensitive mutations — user and access-grant changes, entitlement changes, vendor-credential changes, and key content mutations — are recorded to an append-only trail. The write interface exposes only record and read.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PI-02</td><td><span class="ctitle">Full actor attribution</span><span class="cdesc">Each entry captures actor, role, any impersonated client, org, action, target, session and request IDs, source IP, and user agent.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PI-03</td><td><span class="ctitle">Defined action vocabulary</span><span class="cdesc">Audited actions are drawn from a controlled, code-reviewed vocabulary rather than ad-hoc strings, keeping the trail consistent and queryable.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PI-04</td><td><span class="ctitle">Validated, atomic grant changes</span><span class="cdesc">Access-grant modifications flow through a single validated, audited service path — direct manipulation of grant records is not permitted.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">TSC · Privacy</p>
+    <h2>Privacy</h2>
+    <div class="ctrl-wrap">
+      <table class="ctrl">
+        <thead><tr><th>ID</th><th>Control</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="cid">PR-01</td><td><span class="ctitle">Data minimization in responses</span><span class="cdesc">Lower-privilege and client-tier callers receive masked personal data by default (see CF-03).</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PR-02</td><td><span class="ctitle">Consent / opt-out flags</span><span class="cdesc">Contact records carry opt-out and communication-preference flags that the platform honors.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PR-03</td><td><span class="ctitle">Tenant isolation</span><span class="cdesc">Organization- and client-scoped data is segregated through the RBAC scope model, preventing cross-tenant exposure.</span></td><td><span class="pill ok">Implemented</span></td></tr>
+          <tr><td class="cid">PR-04</td><td><span class="ctitle">Abuse protection on public intake</span><span class="cdesc">Public lead-submission endpoints support per-IP and per-email rate limiting, CAPTCHA, and input validation against automated abuse.</span></td><td><span class="pill cfg">Configurable</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">Model</p>
+    <h2>Shared responsibility</h2>
+    <div class="resp" style="margin-top:16px">
+      <div class="card">
+        <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6l-8-3Z"/></svg>Dash is responsible for</h4>
+        <p>The security of the platform, its infrastructure, access controls, encryption, monitoring, and the controls described in this document.</p>
+      </div>
+      <div class="card">
+        <h4><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>Customers are responsible for</h4>
+        <p>Managing their own users and roles, protecting account credentials, enforcing MFA where available, and appropriate use of exported data.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="wrap">
+  <div class="contact">
+    <p style="margin:0 0 6px"><strong>Security contact</strong></p>
+    <p style="margin:0">For security questionnaires, evidence requests under NDA, or to report a security concern, contact <a href="mailto:support@dashmarketing.io">support@dashmarketing.io</a>.</p>
+  </div>
+  <p class="fine">This document is confidential and intended solely for the recipient's vendor evaluation. Controls described reflect the environment as of the review date and are subject to continuous improvement. This is a self-assessment and not an independent SOC&nbsp;2 audit report.</p>
+</footer>
+
+<script>
+  (function () {
+    var els = document.querySelectorAll('.reveal');
+    if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      els.forEach(function (e) { e.classList.add('in'); });
+      return;
+    }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { threshold: 0.08 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
+</script>
+</body>
+</html>
