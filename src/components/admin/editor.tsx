@@ -4,22 +4,38 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import {
   Bold,
+  ChevronDown,
   Code,
   Heading1,
   Heading2,
   Heading3,
   Image as ImageIcon,
+  Info,
   Italic,
   Link as LinkIcon,
   List,
   ListOrdered,
+  Minus,
   Quote,
+  Redo2,
   SquareCode,
+  Strikethrough,
   Table as TableIcon,
+  Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import Placeholder from "@tiptap/extension-placeholder";
 import { editorExtensions } from "@/lib/markdown/editor-extensions";
+import { CALLOUT_TYPES, type CalloutType } from "@/lib/markdown/callout-node";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { uploadImage, IMAGE_TYPES } from "@/lib/upload-image";
 import { updateDraftAction } from "@/server/actions/pages";
 import { Button } from "@/components/ui/button";
@@ -76,7 +92,7 @@ export function PageEditor({
       ...editorExtensions,
       Placeholder.configure({
         placeholder:
-          "Start writing… Paste markdown, drag in images, or use the toolbar. Tip: the Markdown tab shows the raw source (and supports {% callout %} tags).",
+          "Start writing… Paste markdown, drag in images, or use the toolbar — including callouts via the ⓘ menu. The Markdown tab shows the raw source.",
       }),
     ],
     content: page.contentMd,
@@ -265,6 +281,21 @@ function EditorToolbar({
   return (
     <div className="flex flex-wrap items-center gap-0.5 border-b px-4 py-1.5">
       <ToolbarButton
+        label="Undo"
+        disabled={!editor.can().undo()}
+        onClick={() => c().undo().run()}
+      >
+        <Undo2 className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Redo"
+        disabled={!editor.can().redo()}
+        onClick={() => c().redo().run()}
+      >
+        <Redo2 className="size-4" />
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-border" />
+      <ToolbarButton
         label="Heading 1"
         active={editor.isActive("heading", { level: 1 })}
         onClick={() => c().toggleHeading({ level: 1 }).run()}
@@ -299,6 +330,13 @@ function EditorToolbar({
         onClick={() => c().toggleItalic().run()}
       >
         <Italic className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Strikethrough"
+        active={editor.isActive("strike")}
+        onClick={() => c().toggleStrike().run()}
+      >
+        <Strikethrough className="size-4" />
       </ToolbarButton>
       <ToolbarButton
         label="Inline code"
@@ -351,13 +389,13 @@ function EditorToolbar({
         <SquareCode className="size-4" />
       </ToolbarButton>
       <ToolbarButton
-        label="Insert table"
-        onClick={() =>
-          c().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-        }
+        label="Divider"
+        onClick={() => c().setHorizontalRule().run()}
       >
-        <TableIcon className="size-4" />
+        <Minus className="size-4" />
       </ToolbarButton>
+      <CalloutMenu editor={editor} />
+      <TableMenu editor={editor} />
       <ToolbarButton label="Insert image" onClick={() => fileInput.current?.click()}>
         <ImageIcon className="size-4" />
       </ToolbarButton>
@@ -374,5 +412,141 @@ function EditorToolbar({
         }}
       />
     </div>
+  );
+}
+
+const CALLOUT_DOTS: Record<CalloutType, string> = {
+  note: "bg-blue-400",
+  warning: "bg-amber-400",
+  success: "bg-green-400",
+  danger: "bg-red-400",
+};
+
+function CalloutMenu({ editor }: { editor: Editor }) {
+  const active = editor.isActive("callout");
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            title="Callout"
+            aria-label="Callout"
+            className={cn("h-8 gap-0.5 px-1.5", active && "bg-accent")}
+          />
+        }
+      >
+        <Info className="size-4" />
+        <ChevronDown className="size-3 opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {active ? "Callout type" : "Insert callout"}
+          </DropdownMenuLabel>
+          {CALLOUT_TYPES.map((type) => (
+            <DropdownMenuItem
+              key={type}
+              onClick={() => {
+                const chain = editor.chain().focus();
+                if (editor.isActive("callout")) {
+                  chain.setCalloutType(type).run();
+                } else {
+                  chain.setCallout({ type }).run();
+                }
+              }}
+            >
+              <span className={cn("size-2 rounded-full", CALLOUT_DOTS[type])} />
+              <span className="capitalize">{type}</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        {active && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem
+                onClick={() => editor.chain().focus().unsetCallout().run()}
+              >
+                Remove callout
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function TableMenu({ editor }: { editor: Editor }) {
+  if (!editor.isActive("table")) {
+    return (
+      <ToolbarButton
+        label="Insert table"
+        onClick={() =>
+          editor
+            .chain()
+            .focus()
+            .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            .run()
+        }
+      >
+        <TableIcon className="size-4" />
+      </ToolbarButton>
+    );
+  }
+  const c = () => editor.chain().focus();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            title="Table options"
+            aria-label="Table options"
+            className="h-8 gap-0.5 bg-accent px-1.5"
+          />
+        }
+      >
+        <TableIcon className="size-4" />
+        <ChevronDown className="size-3 opacity-60" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Table</DropdownMenuLabel>
+          <DropdownMenuItem onClick={() => c().addRowAfter().run()}>
+            Add row below
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => c().addRowBefore().run()}>
+            Add row above
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => c().addColumnAfter().run()}>
+            Add column right
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => c().addColumnBefore().run()}>
+            Add column left
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => c().deleteRow().run()}>
+            Delete row
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => c().deleteColumn().run()}>
+            Delete column
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => c().deleteTable().run()}
+          >
+            Delete table
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -6,6 +6,7 @@ import { settings } from "@/db/schema";
 export const PDF_HEADER_KEY = "pdf.headerText";
 export const PDF_FOOTER_KEY = "pdf.footerText";
 export const PDF_LOGO_KEY = "pdf.logoUrl";
+export const GA_ID_KEY = "analytics.gaId";
 
 export async function getSettings(
   db: Db,

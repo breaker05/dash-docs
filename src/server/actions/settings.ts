@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
+  GA_ID_KEY,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
   PDF_LOGO_KEY,
   setSetting,
 } from "@/server/settings";
+import { extractGaId } from "@/lib/analytics";
 import { eq } from "drizzle-orm";
 import { pages } from "@/db/schema";
 
@@ -28,6 +30,23 @@ export async function updatePdfSettingsAction(opts: {
     userId: user.id,
   });
   revalidatePath("/admin/settings");
+}
+
+export async function updateGaIdAction(opts: { value: string }) {
+  const user = await requireAdmin();
+  let id = "";
+  if (opts.value.trim() !== "") {
+    const extracted = extractGaId(opts.value);
+    if (!extracted) {
+      throw new Error(
+        "No measurement ID found — paste the GA snippet or an ID like G-XXXXXXXXXX",
+      );
+    }
+    id = extracted;
+  }
+  await setSetting(db, { key: GA_ID_KEY, value: id, userId: user.id });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
 }
 
 export async function setPdfLogoAction(opts: { url: string }) {

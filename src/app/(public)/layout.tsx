@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { Search, Sparkles } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { getPublicNav } from "@/server/pages/nav";
+import { GA_ID_KEY, getSettings } from "@/server/settings";
 import { PublicNav } from "@/components/public/nav";
 import { MobileNav } from "@/components/public/mobile-nav";
 import { DashLogo } from "@/components/brand/dash-logo";
@@ -15,10 +17,15 @@ export default async function PublicLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const nav = await getPublicNav(db, Boolean(session?.user));
+  const [nav, settings] = await Promise.all([
+    getPublicNav(db, Boolean(session?.user)),
+    getSettings(db, [GA_ID_KEY]),
+  ]);
+  const gaId = settings[GA_ID_KEY];
 
   return (
     <div className="min-h-screen">
+      {gaId && <GoogleAnalytics gaId={gaId} />}
       <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-screen-2xl items-center gap-4 px-4 md:gap-6 md:px-5 lg:px-8">
           <MobileNav nodes={nav} />

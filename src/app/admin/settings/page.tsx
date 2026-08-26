@@ -2,12 +2,15 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import {
+  GA_ID_KEY,
   getSettings,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
   PDF_LOGO_KEY,
 } from "@/server/settings";
 import { PdfSettingsForm } from "@/components/admin/pdf-settings-form";
+import { AnalyticsSettingsForm } from "@/components/admin/analytics-settings-form";
+import { Separator } from "@/components/ui/separator";
 
 export default async function SettingsPage() {
   const me = await requireUser();
@@ -17,6 +20,7 @@ export default async function SettingsPage() {
     PDF_HEADER_KEY,
     PDF_FOOTER_KEY,
     PDF_LOGO_KEY,
+    GA_ID_KEY,
   ]);
 
   return (
@@ -44,6 +48,15 @@ export default async function SettingsPage() {
         footerText={values[PDF_FOOTER_KEY] ?? ""}
         logoUrl={values[PDF_LOGO_KEY] ?? ""}
       />
+
+      <Separator className="my-8" />
+
+      <h2 className="mb-1 text-lg font-semibold tracking-tight">Analytics</h2>
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        Traffic measurement for the public docs site. The tag is only rendered
+        on public pages — the admin area is never tracked.
+      </p>
+      <AnalyticsSettingsForm gaId={values[GA_ID_KEY] ?? ""} />
     </div>
   );
 }
