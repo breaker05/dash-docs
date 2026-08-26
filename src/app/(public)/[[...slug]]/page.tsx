@@ -146,7 +146,7 @@ export default async function PublicPage({
           )}
         </div>
       </header>
-      <div className="prose prose-neutral max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-primary prose-a:decoration-primary/40 prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none prose-th:text-[0.85rem] prose-td:text-[0.9rem]">
+      <div className="prose prose-neutral max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-headings:tracking-tight prose-a:text-primary prose-a:decoration-primary/40 prose-code:rounded prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:text-[0.85em] prose-code:font-normal prose-code:before:content-none prose-code:after:content-none prose-th:text-[0.85rem] prose-td:text-[0.9rem] prose-img:rounded-lg prose-img:shadow-[0_2px_10px_rgba(0,0,0,0.10),0_1px_2px_rgba(0,0,0,0.06)] prose-img:ring-1 prose-img:ring-black/5 dark:prose-img:shadow-[0_2px_10px_rgba(0,0,0,0.5)] dark:prose-img:ring-white/10">
         {renderMarkdoc(page.publishedContentMd)}
       </div>
     </article>
