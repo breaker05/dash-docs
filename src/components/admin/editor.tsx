@@ -25,6 +25,7 @@ import {
 import { toast } from "sonner";
 import Placeholder from "@tiptap/extension-placeholder";
 import { editorExtensions } from "@/lib/markdown/editor-extensions";
+import { serializeMarkdown } from "@/lib/markdown/convert";
 import { CALLOUT_TYPES, type CalloutType } from "@/lib/markdown/callout-node";
 import { LinkPopover, type LinkTarget } from "@/components/admin/link-popover";
 import {
@@ -128,7 +129,7 @@ export function PageEditor({
       },
     },
     onUpdate: ({ editor }) => {
-      markdownRef.current = editor.storage.markdown.getMarkdown();
+      markdownRef.current = serializeMarkdown(editor);
       scheduleSave();
     },
   });

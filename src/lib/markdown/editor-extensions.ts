@@ -7,6 +7,7 @@ import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import { Markdown } from "tiptap-markdown";
 import { CalloutNode } from "./callout-node";
+import { PreserveIndent } from "./preserve-indent";
 
 // Shared by the admin editor UI and the headless round-trip tests, so what
 // the tests prove is exactly what the editor does.
@@ -22,6 +23,7 @@ export const editorExtensions = [
   TableHeader,
   TableCell,
   CalloutNode,
+  PreserveIndent,
   Markdown.configure({
     html: true, // legacy docs contain occasional inline HTML — pass through
     linkify: false,
