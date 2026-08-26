@@ -117,8 +117,8 @@ export default function McpPage() {
         <a href={`${site}/llms.txt`} className="text-primary hover:underline">
           /llms.txt
         </a>{" "}
-        indexes everything for tools that discover docs automatically. There's
-        also a “Copy for LLM” action on every page.
+        indexes everything for tools that discover docs automatically.
+        There&apos;s also a “Copy for LLM” action on every page.
       </p>
       <p className="text-xs text-muted-foreground">
         The MCP server only exposes published, public pages — never drafts or

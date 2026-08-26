@@ -39,7 +39,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-76 shrink-0 flex-col border-r bg-muted/30">
+      <aside className="sticky top-0 flex h-dvh w-76 shrink-0 flex-col border-r bg-muted/30">
         <div className="flex h-14 items-center justify-between border-b px-4">
           <Link href="/admin" className="flex items-center gap-2">
             <DashLogo className="h-3 w-auto text-foreground" />
@@ -61,7 +61,7 @@ export default async function AdminLayout({
           <NewPageButton />
         </div>
 
-        <ScrollArea className="flex-1 px-2 py-2">
+        <ScrollArea className="min-h-0 flex-1 px-2 py-2">
           {tree.length > 0 ? (
             <PageTree items={toItems(tree)} />
           ) : (

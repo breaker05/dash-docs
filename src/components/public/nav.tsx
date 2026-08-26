@@ -162,6 +162,7 @@ export function PublicNav({ nodes }: { nodes: NavNode[] }) {
   useEffect(() => {
     const trail = ancestorsByHref.get(pathname);
     if (!trail || trail.length === 0) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- must run post-hydration so SSR markup matches
     setCollapsed((prev) => {
       if (!trail.some((id) => prev.has(id))) return prev;
       const next = new Set(prev);

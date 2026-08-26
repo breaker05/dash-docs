@@ -19,6 +19,7 @@ export function MobileNav({ nodes }: { nodes: NavNode[] }) {
 
   // close the drawer when a nav link navigates
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reacting to a route change, not local state
     setOpen(false);
   }, [pathname]);
 
