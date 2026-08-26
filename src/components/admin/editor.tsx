@@ -12,7 +12,6 @@ import {
   Image as ImageIcon,
   Info,
   Italic,
-  Link as LinkIcon,
   List,
   ListOrdered,
   Minus,
@@ -27,6 +26,7 @@ import { toast } from "sonner";
 import Placeholder from "@tiptap/extension-placeholder";
 import { editorExtensions } from "@/lib/markdown/editor-extensions";
 import { CALLOUT_TYPES, type CalloutType } from "@/lib/markdown/callout-node";
+import { LinkPopover, type LinkTarget } from "@/components/admin/link-popover";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,10 +50,12 @@ export function PageEditor({
   page,
   role,
   tags,
+  linkTargets = [],
 }: {
   page: PageMeta & { contentMd: string };
   role: "editor" | "admin";
   tags: { all: { id: string; name: string }[]; selected: string[] };
+  linkTargets?: LinkTarget[];
 }) {
   const [title, setTitle] = useState(page.title);
   const [mode, setMode] = useState<"visual" | "raw">("visual");
@@ -212,7 +214,12 @@ export function PageEditor({
         <div className="flex min-w-0 flex-1 flex-col">
           {mode === "visual" ? (
             <>
-              <EditorToolbar editor={editor} onPickImage={insertImages} />
+              <EditorToolbar
+                editor={editor}
+                onPickImage={insertImages}
+                linkTargets={linkTargets}
+                currentPageId={page.id}
+              />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 <EditorContent editor={editor} />
               </div>
@@ -270,9 +277,13 @@ function ToolbarButton({
 function EditorToolbar({
   editor,
   onPickImage,
+  linkTargets,
+  currentPageId,
 }: {
   editor: Editor | null;
   onPickImage: (files: File[]) => void;
+  linkTargets: LinkTarget[];
+  currentPageId: string;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   if (!editor) return null;
@@ -345,20 +356,11 @@ function EditorToolbar({
       >
         <Code className="size-4" />
       </ToolbarButton>
-      <ToolbarButton
-        label="Link"
-        active={editor.isActive("link")}
-        onClick={() => {
-          if (editor.isActive("link")) {
-            c().unsetLink().run();
-            return;
-          }
-          const url = window.prompt("Link URL");
-          if (url) c().setLink({ href: url }).run();
-        }}
-      >
-        <LinkIcon className="size-4" />
-      </ToolbarButton>
+      <LinkPopover
+        editor={editor}
+        targets={linkTargets}
+        currentPageId={currentPageId}
+      />
       <span className="mx-1 h-5 w-px bg-border" />
       <ToolbarButton
         label="Bullet list"
