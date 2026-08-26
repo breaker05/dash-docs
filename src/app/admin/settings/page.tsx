@@ -5,6 +5,7 @@ import {
   getSettings,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
+  PDF_LOGO_KEY,
 } from "@/server/settings";
 import { PdfSettingsForm } from "@/components/admin/pdf-settings-form";
 
@@ -12,7 +13,11 @@ export default async function SettingsPage() {
   const me = await requireUser();
   if (me.role !== "admin") redirect("/admin");
 
-  const values = await getSettings(db, [PDF_HEADER_KEY, PDF_FOOTER_KEY]);
+  const values = await getSettings(db, [
+    PDF_HEADER_KEY,
+    PDF_FOOTER_KEY,
+    PDF_LOGO_KEY,
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-6">
@@ -22,7 +27,7 @@ export default async function SettingsPage() {
       </p>
 
       <h2 className="mb-1 text-lg font-semibold tracking-tight">
-        PDF header &amp; footer
+        PDF exports
       </h2>
       <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
         Applied to PDF exports of pages that have “Default PDF header/footer”
@@ -37,6 +42,7 @@ export default async function SettingsPage() {
       <PdfSettingsForm
         headerText={values[PDF_HEADER_KEY] ?? ""}
         footerText={values[PDF_FOOTER_KEY] ?? ""}
+        logoUrl={values[PDF_LOGO_KEY] ?? ""}
       />
     </div>
   );
