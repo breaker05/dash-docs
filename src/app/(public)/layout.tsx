@@ -7,9 +7,31 @@ import { getPublicNav } from "@/server/pages/nav";
 import { GA_ID_KEY, getSettings } from "@/server/settings";
 import { PublicNav } from "@/components/public/nav";
 import { MobileNav } from "@/components/public/mobile-nav";
+import {
+  SearchPalette,
+  type PaletteItem,
+} from "@/components/search-palette";
+import type { NavNode } from "@/server/pages/nav";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
+
+function paletteItems(nodes: NavNode[], into: PaletteItem[] = []): PaletteItem[] {
+  for (const node of nodes) {
+    if (node.published) {
+      into.push({
+        id: node.id,
+        title: node.title,
+        subtitle: node.isHome ? "/" : `/${node.path}`,
+        href: node.isHome ? "/" : `/${node.path}`,
+        icon: node.icon,
+        isHome: node.isHome,
+      });
+    }
+    paletteItems(node.children, into);
+  }
+  return into;
+}
 
 export default async function PublicLayout({
   children,
@@ -26,6 +48,7 @@ export default async function PublicLayout({
   return (
     <div className="min-h-screen">
       {gaId && <GoogleAnalytics gaId={gaId} />}
+      <SearchPalette items={paletteItems(nav)} mode="public" />
       <header className="sticky top-0 z-10 border-b bg-background/90 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-screen-2xl items-center gap-4 px-4 md:gap-6 md:px-5 lg:px-8">
           <MobileNav nodes={nav} />
@@ -42,8 +65,11 @@ export default async function PublicLayout({
                 type="search"
                 name="q"
                 placeholder="Search the docs…"
-                className="h-9.5 w-full rounded-lg border bg-muted/50 pl-9.5 pr-3 text-sm transition-colors focus:border-ring focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring/40"
+                className="h-9.5 w-full rounded-lg border bg-muted/50 pl-9.5 pr-12 text-sm transition-colors focus:border-ring focus:bg-background focus:outline-none focus:ring-2 focus:ring-ring/40"
               />
+              <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 font-sans text-[0.65rem] text-muted-foreground">
+                ⌘K
+              </kbd>
             </div>
           </form>
           <Link

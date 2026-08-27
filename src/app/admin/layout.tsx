@@ -5,11 +5,33 @@ import { db } from "@/db";
 import { getTree, type TreeNode } from "@/server/pages/tree";
 import { PageTree, type TreeItem } from "@/components/admin/page-tree";
 import { NewPageButton } from "@/components/admin/new-page-button";
+import {
+  SearchPalette,
+  type PaletteItem,
+} from "@/components/search-palette";
 import { Button } from "@/components/ui/button";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
 import { ExternalLink, Settings, Tags, Users } from "lucide-react";
+
+function toPaletteItems(
+  nodes: TreeNode[],
+  into: PaletteItem[] = [],
+): PaletteItem[] {
+  for (const node of nodes) {
+    into.push({
+      id: node.id,
+      title: node.title,
+      subtitle: `/${node.path}`,
+      href: `/admin/pages/${node.id}`,
+      icon: node.icon,
+      isHome: node.isHome,
+    });
+    toPaletteItems(node.children, into);
+  }
+  return into;
+}
 
 function toItems(nodes: TreeNode[]): TreeItem[] {
   return nodes.map((n) => ({
@@ -39,6 +61,7 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen">
+      <SearchPalette items={toPaletteItems(tree)} mode="admin" />
       <aside className="sticky top-0 flex h-dvh w-76 shrink-0 flex-col border-r bg-muted/30">
         <div className="flex h-14 items-center justify-between border-b px-4">
           <Link href="/admin" className="flex items-center gap-2">
@@ -57,8 +80,14 @@ export default async function AdminLayout({
           </Button>
         </div>
 
-        <div className="px-3 pb-1 pt-3">
+        <div className="space-y-1.5 px-3 pb-1 pt-3">
           <NewPageButton />
+          <p className="px-1 text-[0.7rem] text-muted-foreground">
+            Jump anywhere with{" "}
+            <kbd className="rounded border bg-background px-1 py-px font-sans">
+              ⌘K
+            </kbd>
+          </p>
         </div>
 
         <ScrollArea className="min-h-0 flex-1 px-2 py-2">
