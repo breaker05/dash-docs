@@ -1,10 +1,10 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { createTestDb } from "@/db/test-db";
 import type { Db } from "@/db";
-import { editPresence, users } from "@/db/schema";
+import { editPresence, pages, users } from "@/db/schema";
 import { createPage, updateDraft, DRAFT_CONFLICT } from "./pages/tree";
 import { activeEditors, heartbeat } from "./presence";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 let db: Db;
 let close: () => Promise<void>;
@@ -95,6 +95,30 @@ describe("draft conflict detection", () => {
     expect(third.draftUpdatedAt.getTime()).toBeGreaterThanOrEqual(
       second.draftUpdatedAt.getTime(),
     );
+  });
+
+  it("tolerates microsecond-precision stored timestamps (existing rows)", async () => {
+    // rows written by defaultNow()/restore carry microseconds; the client's
+    // base timestamp round-trips through a JS Date at millisecond precision
+    await db
+      .update(pages)
+      .set({
+        draftUpdatedAt: sql`date_trunc('milliseconds', now()) + interval '0.000528 seconds'`,
+      })
+      .where(eq(pages.id, pageId));
+    const [row] = await db
+      .select({ draftUpdatedAt: pages.draftUpdatedAt })
+      .from(pages)
+      .where(eq(pages.id, pageId));
+
+    // first save after loading such a page must NOT conflict
+    const saved = await updateDraft(db, {
+      id: pageId,
+      contentMd: "edit on legacy row",
+      userId: alice,
+      baseDraftUpdatedAt: row.draftUpdatedAt,
+    });
+    expect(saved.draftUpdatedAt).toBeInstanceOf(Date);
   });
 
   it("saves without a precondition still work (legacy callers)", async () => {

@@ -120,7 +120,12 @@ export async function updateDraft(
       opts.baseDraftUpdatedAt
         ? and(
             eq(pages.id, opts.id),
-            sql`${pages.draftUpdatedAt} <= ${opts.baseDraftUpdatedAt}`,
+            // truncate the stored side to milliseconds for the comparison:
+            // the base timestamp round-tripped through a JS Date (ms
+            // precision), while rows written by defaultNow(), restore, or
+            // pre-existing data carry microseconds — comparing at full
+            // precision made every first save falsely conflict
+            sql`date_trunc('milliseconds', ${pages.draftUpdatedAt}) <= ${opts.baseDraftUpdatedAt}`,
           )
         : eq(pages.id, opts.id),
     )
