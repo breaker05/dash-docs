@@ -7,7 +7,9 @@ import {
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
   PDF_LOGO_KEY,
+  SLACK_WEBHOOK_KEY,
 } from "@/server/settings";
+import { SlackSettingsForm } from "@/components/admin/slack-settings-form";
 import { listApiKeys } from "@/server/api-keys";
 import { PdfSettingsForm } from "@/components/admin/pdf-settings-form";
 import { AnalyticsSettingsForm } from "@/components/admin/analytics-settings-form";
@@ -24,6 +26,7 @@ export default async function SettingsPage() {
     PDF_FOOTER_KEY,
     PDF_LOGO_KEY,
     GA_ID_KEY,
+    SLACK_WEBHOOK_KEY,
   ]);
 
   return (
@@ -60,6 +63,19 @@ export default async function SettingsPage() {
         on public pages — the admin area is never tracked.
       </p>
       <AnalyticsSettingsForm gaId={values[GA_ID_KEY] ?? ""} />
+
+      <Separator className="my-8" />
+
+      <h2 className="mb-1 text-lg font-semibold tracking-tight">
+        Slack digest
+      </h2>
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        A weekly summary of published docs changes, posted to a Slack channel
+        via an incoming webhook. Includes internal pages (it goes to your
+        team). The public <code className="rounded bg-muted px-1 py-0.5 text-xs">/changelog</code>{" "}
+        page shows the same history to visitors, public pages only.
+      </p>
+      <SlackSettingsForm webhookUrl={values[SLACK_WEBHOOK_KEY] ?? ""} />
 
       <Separator className="my-8" />
 

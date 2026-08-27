@@ -121,6 +121,12 @@ export default async function PublicLayout({
             <Link href="/tags" className="transition-colors hover:text-foreground">
               Browse by tag
             </Link>
+            <Link
+              href="/changelog"
+              className="transition-colors hover:text-foreground"
+            >
+              What&apos;s new
+            </Link>
             <a
               href="https://www.dashmarketing.io"
               className="transition-colors hover:text-foreground"

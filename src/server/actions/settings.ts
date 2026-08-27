@@ -8,6 +8,8 @@ import {
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
   PDF_LOGO_KEY,
+  SLACK_WEBHOOK_KEY,
+  getSettings,
   setSetting,
 } from "@/server/settings";
 import { extractGaId } from "@/lib/analytics";
@@ -47,6 +49,36 @@ export async function updateGaIdAction(opts: { value: string }) {
   await setSetting(db, { key: GA_ID_KEY, value: id, userId: user.id });
   revalidatePath("/admin/settings");
   revalidatePath("/", "layout");
+}
+
+export async function updateSlackWebhookAction(opts: { url: string }) {
+  const user = await requireAdmin();
+  const url = opts.url.trim();
+  if (url !== "" && !url.startsWith("https://hooks.slack.com/")) {
+    throw new Error("Must be a Slack incoming-webhook URL (hooks.slack.com)");
+  }
+  await setSetting(db, { key: SLACK_WEBHOOK_KEY, value: url, userId: user.id });
+  revalidatePath("/admin/settings");
+}
+
+export async function sendTestDigestAction(): Promise<{ count: number }> {
+  await requireAdmin();
+  const { formatDigest, postToSlack, recentPublishes } = await import(
+    "@/server/digest"
+  );
+  const { siteUrl } = await import("@/lib/site-url");
+  const settings = await getSettings(db, [SLACK_WEBHOOK_KEY]);
+  const webhook = settings[SLACK_WEBHOOK_KEY];
+  if (!webhook) throw new Error("Save a webhook URL first");
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const entries = await recentPublishes(db, {
+    since,
+    includeInternal: true,
+    limit: 30,
+  });
+  const ok = await postToSlack(webhook, formatDigest(entries, siteUrl()));
+  if (!ok) throw new Error("Slack rejected the message — check the URL");
+  return { count: entries.length };
 }
 
 export async function setPdfLogoAction(opts: { url: string }) {
