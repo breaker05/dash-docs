@@ -38,7 +38,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { uploadImage, IMAGE_TYPES } from "@/lib/upload-image";
-import { updateDraftAction } from "@/server/actions/pages";
+import {
+  editPresenceAction,
+  updateDraftAction,
+} from "@/server/actions/pages";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -53,7 +56,7 @@ export function PageEditor({
   tags,
   linkTargets = [],
 }: {
-  page: PageMeta & { contentMd: string };
+  page: PageMeta & { contentMd: string; draftUpdatedAt?: string };
   role: "editor" | "admin";
   tags: { all: { id: string; name: string }[]; selected: string[] };
   linkTargets?: LinkTarget[];
@@ -62,32 +65,69 @@ export function PageEditor({
   const [mode, setMode] = useState<"visual" | "raw">("visual");
   const [rawMarkdown, setRawMarkdown] = useState(page.contentMd);
   const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [conflict, setConflict] = useState(false);
+  const [otherEditors, setOtherEditors] = useState<string[]>([]);
 
   // single source of truth for content: the markdown string
   const markdownRef = useRef(page.contentMd);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const titleRef = useRef(title);
+  // the draft timestamp this session is based on; sending it with each save
+  // stops us from overwriting a save made in another session
+  const baseDraftRef = useRef<string | undefined>(page.draftUpdatedAt);
+  const conflictRef = useRef(false);
   useEffect(() => {
     titleRef.current = title;
   }, [title]);
 
   const scheduleSave = useCallback(() => {
+    if (conflictRef.current) return;
     setSaveState("dirty");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
+      if (conflictRef.current) return;
       setSaveState("saving");
       try {
-        await updateDraftAction({
+        const result = await updateDraftAction({
           id: page.id,
           title: titleRef.current,
           contentMd: markdownRef.current,
+          baseDraftUpdatedAt: baseDraftRef.current,
         });
+        if ("conflict" in result) {
+          conflictRef.current = true;
+          setConflict(true);
+          setSaveState("dirty");
+          return;
+        }
+        baseDraftRef.current = result.draftUpdatedAt;
         setSaveState("saved");
       } catch (e) {
         setSaveState("dirty");
         toast.error(e instanceof Error ? e.message : "Autosave failed");
       }
     }, 2000);
+  }, [page.id]);
+
+  // presence: announce this session and learn who else is editing
+  useEffect(() => {
+    let cancelled = false;
+    const ping = async () => {
+      try {
+        const res = await editPresenceAction({ pageId: page.id });
+        if (!cancelled) {
+          setOtherEditors(res?.editors.map((e) => e.userName) ?? []);
+        }
+      } catch {
+        // presence is best-effort
+      }
+    };
+    void ping();
+    const interval = setInterval(ping, 20_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [page.id]);
 
   const editor = useEditor({
@@ -186,22 +226,30 @@ export function PageEditor({
         <span
           className={cn(
             "flex items-center gap-1.5 text-xs",
-            saveState === "saved"
-              ? "text-muted-foreground"
-              : "text-amber-600",
+            conflict
+              ? "text-red-600"
+              : saveState === "saved"
+                ? "text-muted-foreground"
+                : "text-amber-600",
           )}
         >
           <span
             className={cn(
               "size-1.5 rounded-full",
-              saveState === "saved" ? "bg-green-500" : "bg-amber-500",
+              conflict
+                ? "bg-red-500"
+                : saveState === "saved"
+                  ? "bg-green-500"
+                  : "bg-amber-500",
             )}
           />
-          {saveState === "saved"
-            ? "Saved"
-            : saveState === "saving"
-              ? "Saving…"
-              : "Unsaved"}
+          {conflict
+            ? "Out of sync"
+            : saveState === "saved"
+              ? "Saved"
+              : saveState === "saving"
+                ? "Saving…"
+                : "Unsaved"}
         </span>
         <Tabs value={mode} onValueChange={(v) => switchMode(v as "visual" | "raw")}>
           <TabsList>
@@ -211,6 +259,30 @@ export function PageEditor({
         </Tabs>
       </header>
 
+      {conflict && (
+        <div className="flex items-center justify-between gap-3 border-b border-red-200 bg-red-50 px-6 py-2.5 text-sm text-red-800">
+          <p>
+            <strong>This draft changed in another session</strong> — your
+            edits here are no longer being saved. Reload to pick up the
+            latest version (your unsaved changes in this tab will be lost).
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </Button>
+        </div>
+      )}
+      {!conflict && otherEditors.length > 0 && (
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-800">
+          <strong>{otherEditors.join(", ")}</strong>{" "}
+          {otherEditors.length === 1 ? "is" : "are"} also editing this page —
+          the most recent save wins, so coordinate before making big changes.
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {mode === "visual" ? (

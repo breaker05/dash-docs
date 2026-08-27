@@ -14,6 +14,7 @@ vi.mock("@/server/actions/pages", () => ({
   setPageIconAction: vi.fn(),
   deletePageAction: vi.fn(),
   setHomePageAction: vi.fn(),
+  editPresenceAction: vi.fn().mockResolvedValue({ editors: [] }),
 }));
 vi.mock("@/server/actions/publish", () => ({
   publishAction: vi.fn(),

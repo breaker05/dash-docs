@@ -85,19 +85,54 @@ export async function createPage(
   });
 }
 
+/** Thrown when a draft save would overwrite someone else's newer save. */
+export const DRAFT_CONFLICT = "DRAFT_CONFLICT";
+
+/**
+ * Save draft changes. When `baseDraftUpdatedAt` is given (the timestamp the
+ * client loaded or last saved), the write is rejected with DRAFT_CONFLICT if
+ * the row has been saved since — so concurrent editors can't silently
+ * overwrite each other. Returns the new draftUpdatedAt for the client to
+ * carry forward.
+ */
 export async function updateDraft(
   db: Db,
-  opts: { id: string; title?: string; contentMd?: string; userId: string },
-): Promise<void> {
-  await db
+  opts: {
+    id: string;
+    title?: string;
+    contentMd?: string;
+    userId: string;
+    baseDraftUpdatedAt?: Date;
+  },
+): Promise<{ draftUpdatedAt: Date }> {
+  const updated = await db
     .update(pages)
     .set({
       ...(opts.title !== undefined ? { title: opts.title } : {}),
       ...(opts.contentMd !== undefined ? { contentMd: opts.contentMd } : {}),
-      draftUpdatedAt: sql`now()`,
+      // clock_timestamp (not now()): distinct per statement even inside a
+      // transaction; ms-truncated so the value round-trips through JS Dates
+      // exactly and the precondition compares clean
+      draftUpdatedAt: sql`date_trunc('milliseconds', clock_timestamp())`,
       updatedBy: opts.userId,
     })
-    .where(eq(pages.id, opts.id));
+    .where(
+      opts.baseDraftUpdatedAt
+        ? and(
+            eq(pages.id, opts.id),
+            sql`${pages.draftUpdatedAt} <= ${opts.baseDraftUpdatedAt}`,
+          )
+        : eq(pages.id, opts.id),
+    )
+    .returning({ draftUpdatedAt: pages.draftUpdatedAt });
+  if (updated.length === 0) {
+    const [exists] = await db
+      .select({ id: pages.id })
+      .from(pages)
+      .where(eq(pages.id, opts.id));
+    throw new Error(exists ? DRAFT_CONFLICT : "Page not found");
+  }
+  return updated[0];
 }
 
 /**

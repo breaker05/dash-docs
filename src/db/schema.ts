@@ -213,6 +213,48 @@ export const settings = pgTable("setting", {
     .defaultNow(),
 });
 
+// Who is editing which page right now (heartbeat upserts from the editor);
+// rows older than a minute are considered gone.
+export const editPresence = pgTable(
+  "edit_presence",
+  {
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => pages.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userName: text("user_name").notNull(),
+    seenAt: timestamp("seen_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.pageId, t.userId] })],
+);
+
+// Anonymous reader feedback on public pages ("was this helpful?").
+export const pageFeedback = pgTable("page_feedback", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pageId: uuid("page_id")
+    .notNull()
+    .references(() => pages.id, { onDelete: "cascade" }),
+  path: text("path").notNull(),
+  helpful: boolean("helpful").notNull(),
+  comment: text("comment"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Public search queries with hit counts — zero-result rows are the
+// "docs we should write next" signal surfaced in /admin/insights.
+export const searchLog = pgTable("search_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  query: text("query").notNull(),
+  resultCount: integer("result_count").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // Fixed-window rate-limit counters (key embeds the window bucket).
 // Postgres-backed so limits hold across serverless instances; expired rows
 // are lazily cleaned up by the limiter itself.

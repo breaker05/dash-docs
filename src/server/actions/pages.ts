@@ -28,10 +28,47 @@ export async function updateDraftAction(opts: {
   id: string;
   title?: string;
   contentMd?: string;
-}) {
+  /** ISO timestamp the client loaded/last saved — rejects overwrites of newer saves */
+  baseDraftUpdatedAt?: string;
+}): Promise<{ draftUpdatedAt: string } | { conflict: true }> {
   const user = await requireEditor();
-  await tree.updateDraft(db, { ...opts, userId: user.id });
-  // no revalidate: autosave must not re-render the editor under the user
+  try {
+    const { draftUpdatedAt } = await tree.updateDraft(db, {
+      id: opts.id,
+      title: opts.title,
+      contentMd: opts.contentMd,
+      userId: user.id,
+      baseDraftUpdatedAt: opts.baseDraftUpdatedAt
+        ? new Date(opts.baseDraftUpdatedAt)
+        : undefined,
+    });
+    // no revalidate: autosave must not re-render the editor under the user
+    return { draftUpdatedAt: draftUpdatedAt.toISOString() };
+  } catch (e) {
+    // returned (not thrown): server-action error messages are masked in
+    // production, and the client must reliably distinguish a conflict
+    if (e instanceof Error && e.message === tree.DRAFT_CONFLICT) {
+      return { conflict: true };
+    }
+    throw e;
+  }
+}
+
+export async function editPresenceAction(opts: {
+  pageId: string;
+}): Promise<{ editors: { userName: string }[] }> {
+  const user = await requireEditor();
+  const { heartbeat, activeEditors } = await import("@/server/presence");
+  await heartbeat(db, {
+    pageId: opts.pageId,
+    userId: user.id,
+    userName: user.name ?? user.email ?? "Someone",
+  });
+  const editors = await activeEditors(db, {
+    pageId: opts.pageId,
+    excludeUserId: user.id,
+  });
+  return { editors: editors.map((e) => ({ userName: e.userName })) };
 }
 
 export async function movePageAction(opts: {
