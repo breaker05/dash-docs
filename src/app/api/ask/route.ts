@@ -4,7 +4,12 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
-import { searchContextChunks } from "@/server/context-docs";
+import {
+  searchContextChunks,
+  searchContextChunksByVector,
+} from "@/server/context-docs";
+import { getEmbeddingProvider } from "@/server/embeddings";
+import { reciprocalRankFusion } from "@/lib/rrf";
 import { getAskConfig } from "@/server/settings";
 import {
   buildAskPrompt,
@@ -22,6 +27,12 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MODEL = "claude-haiku-4-5";
+
+// Retrieval budget per answer. File chunks get their own reserved slots so a
+// large reference file (e.g. an API spec split into many chunks) is never
+// squeezed out by page hits; pages likewise keep a floor.
+const PAGE_SLOTS = 4;
+const FILE_CHUNK_SLOTS = 8;
 
 /**
  * "Ask the docs": retrieval-grounded Q&A over published pages. Signed-in
@@ -111,7 +122,7 @@ export async function POST(request: Request) {
   let chunkHits = await searchContextChunks(db, {
     query: question,
     includeInternal,
-    limit: 3,
+    limit: FILE_CHUNK_SLOTS,
   });
   if (chunkHits.length === 0) {
     const orQuery = buildOrQuery(question);
@@ -119,29 +130,53 @@ export async function POST(request: Request) {
       chunkHits = await searchContextChunks(db, {
         query: orQuery,
         includeInternal,
-        limit: 3,
+        limit: FILE_CHUNK_SLOTS,
       });
     }
   }
-  const sources: AskSource[] = [
-    ...hits
-      .map((h) => byId.get(h.id))
-      .filter((r): r is NonNullable<typeof r> => Boolean(r))
-      .map((r) => ({
-        title: r.title ?? "Untitled",
-        path: r.path,
-        markdown: r.markdown ?? "",
-        kind: "page" as const,
-      })),
-    ...chunkHits.map((c) => ({
-      title: `${c.docName} (part ${c.ord + 1})`,
-      path: "",
-      markdown: c.content,
-      kind: "file" as const,
-    })),
-  ]
-    .slice(0, 6)
-    .map((s, i) => ({ ...s, n: i + 1 }));
+  // Semantic pass (additive): when an embedding provider is configured, blend
+  // vector-similarity hits with the keyword hits via reciprocal rank fusion so
+  // conceptually-matching chunks surface even when they share no keywords. No
+  // provider wired yet → this is skipped and retrieval stays keyword-only.
+  const embedder = getEmbeddingProvider();
+  if (embedder) {
+    const [queryVec] = await embedder.embed([question]);
+    if (queryVec) {
+      const vectorHits = await searchContextChunksByVector(db, {
+        embedding: queryVec,
+        includeInternal,
+        limit: FILE_CHUNK_SLOTS,
+      });
+      chunkHits = reciprocalRankFusion(
+        [chunkHits, vectorHits],
+        (c) => `${c.docId}:${c.ord}`,
+      ).slice(0, FILE_CHUNK_SLOTS);
+    }
+  }
+  // Reserve slots for each source kind so a large reference file (many
+  // matching chunks) is never crowded out by page hits, and vice versa.
+  const pageSources: AskSource[] = hits
+    .map((h) => byId.get(h.id))
+    .filter((r): r is NonNullable<typeof r> => Boolean(r))
+    .slice(0, PAGE_SLOTS)
+    .map((r) => ({
+      n: 0,
+      title: r.title ?? "Untitled",
+      path: r.path,
+      markdown: r.markdown ?? "",
+      kind: "page" as const,
+    }));
+  const fileSources: AskSource[] = chunkHits.slice(0, FILE_CHUNK_SLOTS).map((c) => ({
+    n: 0,
+    title: `${c.docName} (part ${c.ord + 1})`,
+    path: "",
+    markdown: c.content,
+    kind: "file" as const,
+  }));
+  const sources: AskSource[] = [...pageSources, ...fileSources].map((s, i) => ({
+    ...s,
+    n: i + 1,
+  }));
 
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();

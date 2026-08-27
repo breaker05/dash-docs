@@ -2,6 +2,12 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { contextChunks, contextDocs } from "@/db/schema";
 import { chunkText } from "@/lib/chunk-text";
+import { chunkOpenApi } from "@/lib/openapi-chunk";
+import {
+  getEmbeddingProvider,
+  toVectorLiteral,
+  type EmbeddingProvider,
+} from "@/server/embeddings";
 
 export const MAX_CONTEXT_DOC_BYTES = 2 * 1024 * 1024;
 
@@ -27,9 +33,11 @@ export async function createContextDoc(
   if (bytes > MAX_CONTEXT_DOC_BYTES) {
     throw new Error("File too large (max 2MB)");
   }
-  const chunks = chunkText(content);
+  // OpenAPI/Swagger specs chunk per-endpoint so retrieval lands coherent
+  // hits; everything else (and unparseable specs) falls back to size-based.
+  const chunks = chunkOpenApi(content) ?? chunkText(content);
 
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [doc] = await tx
       .insert(contextDocs)
       .values({
@@ -60,6 +68,44 @@ export async function createContextDoc(
     }
     return { id: doc.id, chunkCount: chunks.length };
   });
+
+  // Semantic index (Neon-only). No-op until an embedding provider is wired:
+  // the pgvector `embedding` column lives on Neon (see scripts/pgvector-setup.sql),
+  // not in the Drizzle schema, so this path is skipped in the PGlite test DB.
+  const embedder = getEmbeddingProvider();
+  if (embedder && chunks.length > 0) {
+    await embedDocChunks(db, result.id, chunks, embedder);
+  }
+  return result;
+}
+
+/**
+ * Embed a doc's chunks and store the vectors on `context_chunk.embedding`
+ * (raw SQL — the column exists only on Neon). Chunk `ord` equals the index in
+ * `chunks`, so vectors map back by ordinal. Runs only when a provider is
+ * configured; embedding failures throw and abort the upload.
+ */
+async function embedDocChunks(
+  db: Db,
+  docId: string,
+  chunks: string[],
+  embedder: EmbeddingProvider,
+): Promise<void> {
+  const BATCH = 128;
+  for (let start = 0; start < chunks.length; start += BATCH) {
+    const slice = chunks.slice(start, start + BATCH);
+    const vectors = await embedder.embed(slice);
+    await Promise.all(
+      vectors.map((vec, i) =>
+        db.execute(sql`
+          update ${contextChunks}
+          set embedding = ${toVectorLiteral(vec)}::vector
+          where ${contextChunks.docId} = ${docId}
+            and ${contextChunks.ord} = ${start + i}
+        `),
+      ),
+    );
+  }
 }
 
 export async function listContextDocs(db: Db) {
@@ -148,6 +194,32 @@ export async function searchContextChunks(
       ),
     )
     .limit(limit);
+}
+
+/**
+ * Semantic search over context-file chunks by embedding cosine distance
+ * (pgvector `<=>`). Raw SQL because the `embedding` column lives only on Neon,
+ * not in the Drizzle schema. Only returns rows that have been embedded; callers
+ * fuse these with `searchContextChunks` (keyword) via reciprocal rank fusion.
+ */
+export async function searchContextChunksByVector(
+  db: Db,
+  opts: { embedding: number[]; includeInternal: boolean; limit?: number },
+): Promise<ContextChunkHit[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20);
+  const vec = toVectorLiteral(opts.embedding);
+  const res = (await db.execute(sql`
+    select c.doc_id as "docId", d.name as "docName", c.ord as "ord",
+           c.content as "content"
+    from context_chunk c
+    join context_doc d on d.id = c.doc_id
+    where d.enabled = true
+      and (${opts.includeInternal} or d.audience = 'public')
+      and c.embedding is not null
+    order by c.embedding <=> ${vec}::vector
+    limit ${limit}
+  `)) as unknown as ContextChunkHit[] | { rows: ContextChunkHit[] };
+  return Array.isArray(res) ? res : res.rows;
 }
 
 /** Enabled context files for keyed MCP clients. */

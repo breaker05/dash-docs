@@ -125,7 +125,7 @@ export function AskDocs() {
       >
         <Sparkles className="size-4" /> Ask AI
       </SheetTrigger>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
+      <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-lg">
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-primary" /> Ask the docs
