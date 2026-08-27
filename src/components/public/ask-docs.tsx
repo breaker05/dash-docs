@@ -10,6 +10,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { AnswerMarkdown } from "@/components/public/answer-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -152,15 +153,19 @@ export function AskDocs() {
               key={i}
               className={cn(
                 "text-sm leading-relaxed",
-                turn.role === "user"
-                  ? "ml-8 rounded-xl rounded-br-sm bg-primary/10 px-3.5 py-2.5"
-                  : "whitespace-pre-wrap",
+                turn.role === "user" &&
+                  "ml-8 rounded-xl rounded-br-sm bg-primary/10 px-3.5 py-2.5",
               )}
             >
-              {turn.content ||
-                (turn.role === "assistant" && busy && i === turns.length - 1
-                  ? "…"
-                  : turn.content)}
+              {turn.role === "assistant" ? (
+                turn.content ? (
+                  <AnswerMarkdown text={turn.content} />
+                ) : busy && i === turns.length - 1 ? (
+                  "…"
+                ) : null
+              ) : (
+                turn.content
+              )}
               {turn.sources && turn.sources.length > 0 && (
                 <span className="mt-2.5 flex flex-wrap gap-1.5">
                   {turn.sources.map((s) => (
