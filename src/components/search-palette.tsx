@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Home, Search, Settings, Tags, Users } from "lucide-react";
+import {
+  FileText,
+  Home,
+  Lightbulb,
+  Search,
+  Settings,
+  Tags,
+  Users,
+} from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -105,6 +113,7 @@ export function SearchPalette({
     mode === "admin"
       ? [
           { title: "Feature tags", href: "/admin/tags", icon: Tags },
+          { title: "Insights", href: "/admin/insights", icon: Lightbulb },
           { title: "Team", href: "/admin/users", icon: Users },
           { title: "Settings", href: "/admin/settings", icon: Settings },
         ].filter((l) => q === "" || l.title.toLowerCase().includes(q))

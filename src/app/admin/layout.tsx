@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
-import { ExternalLink, Settings, Tags, Users } from "lucide-react";
+import { ExternalLink, Lightbulb, Settings, Tags, Users } from "lucide-react";
 
 function toPaletteItems(
   nodes: TreeNode[],
@@ -130,6 +130,12 @@ export default async function AdminLayout({
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             <Tags className="size-4" /> Feature tags
+          </Link>
+          <Link
+            href="/admin/insights"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Lightbulb className="size-4" /> Insights
           </Link>
           {session.user.role === "admin" && (
             <>

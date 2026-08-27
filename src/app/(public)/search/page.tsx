@@ -3,7 +3,7 @@ import { Lock, SearchX, Tag as TagIcon } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { eq } from "drizzle-orm";
-import { pages } from "@/db/schema";
+import { pages, searchLog } from "@/db/schema";
 import { searchPages } from "@/server/search";
 import { getPublicTags } from "@/server/tags";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,13 @@ export default async function SearchPage({
     getPublicTags(db, Boolean(session?.user)),
   ]);
   const activeTag = tag ? browseTags.find((t) => t.slug === tag) : undefined;
+
+  // anonymous queries feed the search-gaps report (fire-and-forget)
+  if (q?.trim() && !session?.user && !tag) {
+    db.insert(searchLog)
+      .values({ query: q.trim().slice(0, 200), resultCount: hits.length })
+      .catch(() => {});
+  }
 
   // badge internal results for signed-in users
   const internalPaths = new Set<string>();
