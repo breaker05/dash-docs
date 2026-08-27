@@ -178,6 +178,44 @@ Migrations are committed and run manually from a dev machine — including
 against **prod Neon before each deploy** that adds one. Never use
 `drizzle-kit push`.
 
+## Semantic search for Ask AI (optional, off by default)
+
+Ask AI retrieval is **keyword-only** out of the box: Postgres full-text
+search over chunked pages and reference files. Uploaded OpenAPI/Swagger specs
+are chunked per-endpoint (`src/lib/openapi-chunk.ts`) so keyword search lands
+coherent hits. Semantic (vector) search is fully scaffolded but **dormant** —
+nothing calls an embedding API and no vector column exists until you turn it
+on. When enabled, vector hits are blended with keyword hits by reciprocal rank
+fusion (`src/lib/rrf.ts`), so it's additive, not a replacement.
+
+pgvector lives **only on Neon**, added by a standalone SQL script and accessed
+via raw SQL — deliberately *not* a Drizzle migration, because the test suite
+applies migrations to an in-memory PGlite database that can't load the `vector`
+extension. To enable:
+
+1. **Wire an embedding provider** in `src/server/embeddings.ts`: implement one
+   (Voyage `voyage-3.5` = 1024 dims, or OpenAI `text-embedding-3-small` = 1536
+   dims — sketches are in the file), return it from `getEmbeddingProvider()`
+   when its key is set, and set `EMBEDDING_DIMENSIONS` to match. Add the key to
+   `.env.local` and Vercel (`VOYAGE_API_KEY` or `OPENAI_API_KEY`).
+2. **Add the column + index on Neon** (match the dimension to step 1 — the
+   script defaults to 1024):
+
+   ```bash
+   psql "$DATABASE_URL_UNPOOLED" -f scripts/pgvector-setup.sql
+   ```
+
+3. **Backfill existing chunks** (idempotent — only fills `NULL` embeddings):
+
+   ```bash
+   npx tsx scripts/backfill-embeddings.ts   # add tsx if needed: npm i -D tsx
+   ```
+
+After that, newly uploaded files embed automatically on upload, and Ask AI
+runs hybrid retrieval. To turn it back off, return `null` from
+`getEmbeddingProvider()` — retrieval falls back to keyword-only with no schema
+change.
+
 ## Tests
 
 ```bash
