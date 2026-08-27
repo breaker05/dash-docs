@@ -120,9 +120,23 @@ export default function McpPage() {
         indexes everything for tools that discover docs automatically.
         There&apos;s also a “Copy for LLM” action on every page.
       </p>
+      <h2 className="mb-3 mt-10 text-lg font-semibold tracking-tight">
+        Team access to internal docs
+      </h2>
+      <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+        Internal team systems (chatbots, Claude Code, skills) can read
+        internal published pages through the same MCP server by sending an
+        API key — an admin can mint one under{" "}
+        <span className="font-medium text-foreground">Admin → Settings</span>:
+      </p>
+      <pre className="mb-4 overflow-x-auto rounded-xl border bg-muted/50 p-4 text-xs leading-relaxed">
+        {`claude mcp add --transport http dashdocs ${site}/api/mcp \\
+  --header "Authorization: Bearer dashdocs_…"`}
+      </pre>
       <p className="text-xs text-muted-foreground">
-        The MCP server only exposes published, public pages — never drafts or
-        internal content.
+        Without a key, the MCP server only exposes published, public pages —
+        never drafts or internal content. Invalid keys are rejected rather
+        than downgraded.
       </p>
     </div>
   );

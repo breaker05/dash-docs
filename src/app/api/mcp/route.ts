@@ -1,132 +1,171 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { eq, isNotNull, and, asc } from "drizzle-orm";
+import { eq, isNotNull, and, asc, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
+import { verifyApiKey } from "@/server/api-keys";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Public, read-only MCP server over PUBLISHED, PUBLIC docs only.
-// Internal pages are never exposed here (an authed internal-docs MCP is a
-// planned fast-follow).
+// Read-only MCP server over PUBLISHED docs. Anonymous requests see public
+// pages only. A valid API key (Authorization: Bearer dashdocs_…, minted in
+// Admin → Settings) additionally unlocks internal pages for team tools.
 
-const publicPublished = and(
-  isNotNull(pages.publishedContentMd),
-  eq(pages.effectiveVisibility, "public"),
-);
+function publishedFilter(includeInternal: boolean): SQL {
+  return includeInternal
+    ? isNotNull(pages.publishedContentMd)
+    : and(
+        isNotNull(pages.publishedContentMd),
+        eq(pages.effectiveVisibility, "public"),
+      )!;
+}
 
-const handler = createMcpHandler((server) => {
-  server.registerTool(
-    "search_docs",
-    {
-      title: "Search Dash Marketing docs",
-      description:
-        "Full-text search over the published Dash Marketing documentation (API reference, guides). Returns matching pages with paths and snippets; fetch full content with get_page.",
-      inputSchema: z.object({
-        query: z.string().min(1).describe("Search terms"),
-        limit: z.number().int().min(1).max(50).optional(),
-      }),
-    },
-    async ({ query, limit }) => {
-      const hits = await searchPages(db, {
-        query,
-        includeInternal: false,
-        limit: limit ?? 10,
-      });
-      const text =
-        hits.length === 0
-          ? "No results."
-          : hits
-              .map(
-                (h) =>
-                  `- ${h.title} (path: ${h.path})\n  ${h.snippet.replaceAll("⟪", "").replaceAll("⟫", "")}`,
-              )
-              .join("\n");
-      return { content: [{ type: "text", text }] };
-    },
-  );
+function buildHandler(includeInternal: boolean) {
+  const scopeNote = includeInternal
+    ? " Includes internal team-only pages (authorized access)."
+    : "";
+  return createMcpHandler((server) => {
+    server.registerTool(
+      "search_docs",
+      {
+        title: "Search Dash Marketing docs",
+        description:
+          `Full-text search over the published Dash Marketing documentation (API reference, guides). Returns matching pages with paths and snippets; fetch full content with get_page.${scopeNote}`,
+        inputSchema: z.object({
+          query: z.string().min(1).describe("Search terms"),
+          limit: z.number().int().min(1).max(50).optional(),
+        }),
+      },
+      async ({ query, limit }) => {
+        const hits = await searchPages(db, {
+          query,
+          includeInternal,
+          limit: limit ?? 10,
+        });
+        const text =
+          hits.length === 0
+            ? "No results."
+            : hits
+                .map(
+                  (h) =>
+                    `- ${h.title} (path: ${h.path})\n  ${h.snippet.replaceAll("⟪", "").replaceAll("⟫", "")}`,
+                )
+                .join("\n");
+        return { content: [{ type: "text", text }] };
+      },
+    );
 
-  server.registerTool(
-    "get_page",
-    {
-      title: "Get a docs page",
-      description:
-        "Fetch the full markdown content of a published documentation page by its path (as returned by search_docs or list_pages).",
-      inputSchema: z.object({
-        path: z.string().describe("Page path, e.g. lead-submission-api"),
-      }),
-    },
-    async ({ path }) => {
-      const [page] = await db
-        .select()
-        .from(pages)
-        .where(
-          and(eq(pages.path, path.replace(/^\//, "")), publicPublished),
-        );
-      if (!page) {
+    server.registerTool(
+      "get_page",
+      {
+        title: "Get a docs page",
+        description:
+          `Fetch the full markdown content of a published documentation page by its path (as returned by search_docs or list_pages).${scopeNote}`,
+        inputSchema: z.object({
+          path: z.string().describe("Page path, e.g. lead-submission-api"),
+        }),
+      },
+      async ({ path }) => {
+        const [page] = await db
+          .select()
+          .from(pages)
+          .where(
+            and(
+              eq(pages.path, path.replace(/^\//, "")),
+              publishedFilter(includeInternal),
+            ),
+          );
+        if (!page) {
+          return {
+            content: [
+              { type: "text", text: `No published page at path "${path}".` },
+            ],
+            isError: true,
+          };
+        }
         return {
           content: [
-            { type: "text", text: `No published page at path "${path}".` },
+            {
+              type: "text",
+              text: `# ${page.publishedTitle}\n\n${page.publishedContentMd}`,
+            },
           ],
-          isError: true,
         };
-      }
-      return {
-        content: [
-          {
-            type: "text",
-            text: `# ${page.publishedTitle}\n\n${page.publishedContentMd}`,
-          },
-        ],
-      };
-    },
-  );
+      },
+    );
 
-  server.registerTool(
-    "list_pages",
-    {
-      title: "List docs pages",
-      description:
-        "List all published documentation pages as an indented tree of titles and paths.",
-      inputSchema: z.object({}),
-    },
-    async () => {
-      const rows = await db
-        .select({
-          id: pages.id,
-          parentId: pages.parentId,
-          title: pages.publishedTitle,
-          path: pages.path,
-          position: pages.position,
-        })
-        .from(pages)
-        .where(publicPublished)
-        .orderBy(asc(pages.position));
+    server.registerTool(
+      "list_pages",
+      {
+        title: "List docs pages",
+        description:
+          `List all published documentation pages as an indented tree of titles and paths.${scopeNote}`,
+        inputSchema: z.object({}),
+      },
+      async () => {
+        const rows = await db
+          .select({
+            id: pages.id,
+            parentId: pages.parentId,
+            title: pages.publishedTitle,
+            path: pages.path,
+            position: pages.position,
+            visibility: pages.effectiveVisibility,
+          })
+          .from(pages)
+          .where(publishedFilter(includeInternal))
+          .orderBy(asc(pages.position));
 
-      const byParent = new Map<string | null, typeof rows>();
-      const ids = new Set(rows.map((r) => r.id));
-      for (const row of rows) {
-        const key = row.parentId && ids.has(row.parentId) ? row.parentId : null;
-        if (!byParent.has(key)) byParent.set(key, []);
-        byParent.get(key)!.push(row);
-      }
-      const lines: string[] = [];
-      const walk = (parent: string | null, depth: number) => {
-        for (const row of byParent.get(parent) ?? []) {
-          lines.push(`${"  ".repeat(depth)}- ${row.title} (${row.path})`);
-          walk(row.id, depth + 1);
+        const byParent = new Map<string | null, typeof rows>();
+        const ids = new Set(rows.map((r) => r.id));
+        for (const row of rows) {
+          const key = row.parentId && ids.has(row.parentId) ? row.parentId : null;
+          if (!byParent.has(key)) byParent.set(key, []);
+          byParent.get(key)!.push(row);
         }
-      };
-      walk(null, 0);
-      return {
-        content: [
-          { type: "text", text: lines.join("\n") || "No published pages." },
-        ],
-      };
-    },
-  );
-});
+        const lines: string[] = [];
+        const walk = (parent: string | null, depth: number) => {
+          for (const row of byParent.get(parent) ?? []) {
+            const badge =
+              includeInternal && row.visibility === "internal"
+                ? " [internal]"
+                : "";
+            lines.push(`${"  ".repeat(depth)}- ${row.title} (${row.path})${badge}`);
+            walk(row.id, depth + 1);
+          }
+        };
+        walk(null, 0);
+        return {
+          content: [
+            { type: "text", text: lines.join("\n") || "No published pages." },
+          ],
+        };
+      },
+    );
+  });
+}
+
+const publicHandler = buildHandler(false);
+const internalHandler = buildHandler(true);
+
+async function handler(request: Request): Promise<Response> {
+  const auth = request.headers.get("authorization");
+  if (auth) {
+    const match = auth.match(/^Bearer\s+(.+)$/i);
+    const key = match ? await verifyApiKey(db, match[1].trim()) : null;
+    if (!key) {
+      // a presented-but-invalid credential is an error, never a silent
+      // downgrade to public-only results
+      return Response.json(
+        { error: "Invalid or revoked API key" },
+        { status: 401 },
+      );
+    }
+    return internalHandler(request);
+  }
+  return publicHandler(request);
+}
 
 export { handler as GET, handler as POST, handler as DELETE };

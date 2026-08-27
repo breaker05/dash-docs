@@ -213,6 +213,21 @@ export const settings = pgTable("setting", {
     .defaultNow(),
 });
 
+// API keys for machine access (MCP internal docs). Only a SHA-256 hash of
+// the key is stored; the raw key is shown once at creation.
+export const apiKeys = pgTable("api_key", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});
+
 export const assets = pgTable("asset", {
   id: uuid("id").defaultRandom().primaryKey(),
   blobUrl: text("blob_url").notNull(),

@@ -8,14 +8,17 @@ import {
   PDF_HEADER_KEY,
   PDF_LOGO_KEY,
 } from "@/server/settings";
+import { listApiKeys } from "@/server/api-keys";
 import { PdfSettingsForm } from "@/components/admin/pdf-settings-form";
 import { AnalyticsSettingsForm } from "@/components/admin/analytics-settings-form";
+import { McpKeys } from "@/components/admin/mcp-keys";
 import { Separator } from "@/components/ui/separator";
 
 export default async function SettingsPage() {
   const me = await requireUser();
   if (me.role !== "admin") redirect("/admin");
 
+  const apiKeys = await listApiKeys(db);
   const values = await getSettings(db, [
     PDF_HEADER_KEY,
     PDF_FOOTER_KEY,
@@ -57,6 +60,32 @@ export default async function SettingsPage() {
         on public pages — the admin area is never tracked.
       </p>
       <AnalyticsSettingsForm gaId={values[GA_ID_KEY] ?? ""} />
+
+      <Separator className="my-8" />
+
+      <h2 className="mb-1 text-lg font-semibold tracking-tight">
+        MCP API keys
+      </h2>
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        Keys let AI tools and internal systems (chatbots, Claude Code, skills)
+        read <strong>internal</strong> published pages through the MCP server
+        at <code className="rounded bg-muted px-1 py-0.5 text-xs">/api/mcp</code>.
+        Without a key, MCP only ever serves public pages. Send the key as an{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-xs">
+          Authorization: Bearer
+        </code>{" "}
+        header.
+      </p>
+      <McpKeys
+        keys={apiKeys.map((k) => ({
+          id: k.id,
+          name: k.name,
+          keyPrefix: k.keyPrefix,
+          createdAt: k.createdAt.toISOString(),
+          lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+          revokedAt: k.revokedAt?.toISOString() ?? null,
+        }))}
+      />
     </div>
   );
 }
