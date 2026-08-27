@@ -4,6 +4,7 @@ import type { Db } from "@/db";
 import { users } from "@/db/schema";
 import {
   createApiKey,
+  deleteApiKey,
   listApiKeys,
   revokeApiKey,
   verifyApiKey,
@@ -48,6 +49,17 @@ describe("api keys", () => {
     const { id, token } = await createApiKey(db, { name: "Old bot", userId });
     await revokeApiKey(db, id);
     expect(await verifyApiKey(db, token)).toBeNull();
+  });
+
+  it("deletes only revoked keys", async () => {
+    const { id } = await createApiKey(db, { name: "Active bot", userId });
+    // still active — refuse
+    await expect(deleteApiKey(db, id)).rejects.toThrow("revoked");
+    expect(await listApiKeys(db)).toHaveLength(1);
+
+    await revokeApiKey(db, id);
+    await deleteApiKey(db, id);
+    expect(await listApiKeys(db)).toHaveLength(0);
   });
 
   it("requires a name", async () => {

@@ -5,8 +5,20 @@ import { Check, Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import {
   createApiKeyAction,
+  deleteApiKeyAction,
   revokeApiKeyAction,
 } from "@/server/actions/api-keys";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -18,6 +30,55 @@ export type ApiKeyRow = {
   lastUsedAt: string | null;
   revokedAt: string | null;
 };
+
+function ConfirmButton({
+  label,
+  title,
+  description,
+  confirmLabel,
+  pending,
+  onConfirm,
+}: {
+  label: string;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  pending: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <AlertDialog>
+      <AlertDialogTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="text-destructive"
+            disabled={pending}
+          />
+        }
+      >
+        {label}
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-white hover:bg-destructive/90"
+            onClick={onConfirm}
+          >
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
 
 export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
   const [name, setName] = useState("");
@@ -116,14 +177,34 @@ export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
                     : "never used"}
                 </p>
               </div>
-              {!k.revokedAt && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive"
-                  disabled={pending}
-                  onClick={() =>
+              {k.revokedAt ? (
+                <ConfirmButton
+                  label="Delete"
+                  title={`Delete “${k.name}”?`}
+                  description="This permanently removes the revoked key from the list. It cannot be undone."
+                  confirmLabel="Delete key"
+                  pending={pending}
+                  onConfirm={() =>
+                    startTransition(async () => {
+                      try {
+                        await deleteApiKeyAction({ id: k.id });
+                        toast.success(`Deleted “${k.name}”`);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error ? err.message : "Delete failed",
+                        );
+                      }
+                    })
+                  }
+                />
+              ) : (
+                <ConfirmButton
+                  label="Revoke"
+                  title={`Revoke “${k.name}”?`}
+                  description="Anything using this key immediately loses access to internal docs over MCP. This cannot be undone — you'd need to create a new key."
+                  confirmLabel="Revoke key"
+                  pending={pending}
+                  onConfirm={() =>
                     startTransition(async () => {
                       try {
                         await revokeApiKeyAction({ id: k.id });
@@ -135,9 +216,7 @@ export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
                       }
                     })
                   }
-                >
-                  Revoke
-                </Button>
+                />
               )}
             </li>
           ))}

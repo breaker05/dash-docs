@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { requireAdmin } from "@/server/auth-guards";
-import { createApiKey, revokeApiKey } from "@/server/api-keys";
+import { createApiKey, deleteApiKey, revokeApiKey } from "@/server/api-keys";
 
 export async function createApiKeyAction(opts: {
   name: string;
@@ -20,5 +20,11 @@ export async function createApiKeyAction(opts: {
 export async function revokeApiKeyAction(opts: { id: string }): Promise<void> {
   await requireAdmin();
   await revokeApiKey(db, opts.id);
+  revalidatePath("/admin/settings");
+}
+
+export async function deleteApiKeyAction(opts: { id: string }): Promise<void> {
+  await requireAdmin();
+  await deleteApiKey(db, opts.id);
   revalidatePath("/admin/settings");
 }

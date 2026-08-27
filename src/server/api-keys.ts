@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { apiKeys } from "@/db/schema";
 
@@ -68,4 +68,15 @@ export async function revokeApiKey(db: Db, id: string): Promise<void> {
     .update(apiKeys)
     .set({ revokedAt: sql`now()` })
     .where(eq(apiKeys.id, id));
+}
+
+/** Permanently remove a key. Only revoked keys can be deleted. */
+export async function deleteApiKey(db: Db, id: string): Promise<void> {
+  const deleted = await db
+    .delete(apiKeys)
+    .where(and(eq(apiKeys.id, id), isNotNull(apiKeys.revokedAt)))
+    .returning({ id: apiKeys.id });
+  if (deleted.length === 0) {
+    throw new Error("Only revoked keys can be deleted");
+  }
 }
