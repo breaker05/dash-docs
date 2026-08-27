@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
+  ANTHROPIC_KEY_SETTING,
   GA_ID_KEY,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
@@ -47,6 +48,21 @@ export async function updateGaIdAction(opts: { value: string }) {
     id = extracted;
   }
   await setSetting(db, { key: GA_ID_KEY, value: id, userId: user.id });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function updateAnthropicKeyAction(opts: { value: string }) {
+  const user = await requireAdmin();
+  const value = opts.value.trim();
+  if (value !== "" && !value.startsWith("sk-ant-")) {
+    throw new Error("That doesn't look like an Anthropic API key (sk-ant-…)");
+  }
+  await setSetting(db, {
+    key: ANTHROPIC_KEY_SETTING,
+    value,
+    userId: user.id,
+  });
   revalidatePath("/admin/settings");
   revalidatePath("/", "layout");
 }

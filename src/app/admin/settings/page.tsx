@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import {
+  ANTHROPIC_KEY_SETTING,
   GA_ID_KEY,
   getSettings,
   PDF_FOOTER_KEY,
@@ -9,6 +10,7 @@ import {
   PDF_LOGO_KEY,
   SLACK_WEBHOOK_KEY,
 } from "@/server/settings";
+import { AiSettingsForm } from "@/components/admin/ai-settings-form";
 import { SlackSettingsForm } from "@/components/admin/slack-settings-form";
 import { listApiKeys } from "@/server/api-keys";
 import { PdfSettingsForm } from "@/components/admin/pdf-settings-form";
@@ -27,7 +29,13 @@ export default async function SettingsPage() {
     PDF_LOGO_KEY,
     GA_ID_KEY,
     SLACK_WEBHOOK_KEY,
+    ANTHROPIC_KEY_SETTING,
   ]);
+  const aiSource = process.env.ANTHROPIC_API_KEY
+    ? ("env" as const)
+    : values[ANTHROPIC_KEY_SETTING]
+      ? ("settings" as const)
+      : null;
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-6">
@@ -63,6 +71,17 @@ export default async function SettingsPage() {
         on public pages — the admin area is never tracked.
       </p>
       <AnalyticsSettingsForm gaId={values[GA_ID_KEY] ?? ""} />
+
+      <Separator className="my-8" />
+
+      <h2 className="mb-1 text-lg font-semibold tracking-tight">Ask AI</h2>
+      <p className="mb-4 text-sm leading-relaxed text-muted-foreground">
+        The “Ask AI” chat on the public site answers questions from your
+        published docs with cited sources (visitors see public pages only;
+        signed-in team members also get internal pages). It needs an
+        Anthropic API key and hides itself until one is set.
+      </p>
+      <AiSettingsForm configured={aiSource !== null} source={aiSource} />
 
       <Separator className="my-8" />
 

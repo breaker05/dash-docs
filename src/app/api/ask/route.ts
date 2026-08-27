@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
+import { getAnthropicApiKey } from "@/server/settings";
 import { buildAskPrompt, trimHistory, type AskSource } from "@/lib/ask-prompt";
 import {
   checkRateLimit,
@@ -23,7 +24,8 @@ const MODEL = "claude-haiku-4-5";
  * one {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = await getAnthropicApiKey(db);
+  if (!apiKey) {
     return Response.json({ error: "Ask is not configured" }, { status: 503 });
   }
 
@@ -91,7 +93,7 @@ export async function POST(request: Request) {
       markdown: r.markdown ?? "",
     }));
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
   const send = (controller: ReadableStreamDefaultController, data: unknown) =>
     controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));

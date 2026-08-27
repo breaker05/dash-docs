@@ -8,6 +8,18 @@ export const PDF_FOOTER_KEY = "pdf.footerText";
 export const PDF_LOGO_KEY = "pdf.logoUrl";
 export const GA_ID_KEY = "analytics.gaId";
 export const SLACK_WEBHOOK_KEY = "slack.webhookUrl";
+export const ANTHROPIC_KEY_SETTING = "ai.anthropicApiKey";
+
+/**
+ * The Anthropic API key powering Ask AI: the environment variable wins,
+ * otherwise the admin-saved setting. Returns null when neither is set
+ * (the feature hides itself).
+ */
+export async function getAnthropicApiKey(db: Db): Promise<string | null> {
+  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+  const values = await getSettings(db, [ANTHROPIC_KEY_SETTING]);
+  return values[ANTHROPIC_KEY_SETTING] ?? null;
+}
 
 export async function getSettings(
   db: Db,
