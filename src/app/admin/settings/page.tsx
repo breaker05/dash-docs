@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
+  ASK_DISABLED_KEY,
   GA_ID_KEY,
   getSettings,
   PDF_FOOTER_KEY,
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
     GA_ID_KEY,
     SLACK_WEBHOOK_KEY,
     ANTHROPIC_KEY_SETTING,
+    ASK_DISABLED_KEY,
   ]);
   const aiSource = process.env.ANTHROPIC_API_KEY
     ? ("env" as const)
@@ -81,7 +83,11 @@ export default async function SettingsPage() {
         signed-in team members also get internal pages). It needs an
         Anthropic API key and hides itself until one is set.
       </p>
-      <AiSettingsForm configured={aiSource !== null} source={aiSource} />
+      <AiSettingsForm
+        configured={aiSource !== null}
+        source={aiSource}
+        enabled={aiSource !== null && !values[ASK_DISABLED_KEY]}
+      />
 
       <Separator className="my-8" />
 

@@ -9,16 +9,21 @@ export const PDF_LOGO_KEY = "pdf.logoUrl";
 export const GA_ID_KEY = "analytics.gaId";
 export const SLACK_WEBHOOK_KEY = "slack.webhookUrl";
 export const ANTHROPIC_KEY_SETTING = "ai.anthropicApiKey";
+// present (any value) → chat is temporarily switched off; the key is kept
+export const ASK_DISABLED_KEY = "ai.chatDisabled";
 
 /**
- * The Anthropic API key powering Ask AI: the environment variable wins,
- * otherwise the admin-saved setting. Returns null when neither is set
- * (the feature hides itself).
+ * Ask AI configuration: the API key (environment variable wins, otherwise
+ * the admin-saved setting) plus the temporary on/off switch. The chat runs
+ * only when a key exists AND it hasn't been switched off.
  */
-export async function getAnthropicApiKey(db: Db): Promise<string | null> {
-  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
-  const values = await getSettings(db, [ANTHROPIC_KEY_SETTING]);
-  return values[ANTHROPIC_KEY_SETTING] ?? null;
+export async function getAskConfig(
+  db: Db,
+): Promise<{ apiKey: string | null; enabled: boolean }> {
+  const values = await getSettings(db, [ANTHROPIC_KEY_SETTING, ASK_DISABLED_KEY]);
+  const apiKey =
+    process.env.ANTHROPIC_API_KEY || values[ANTHROPIC_KEY_SETTING] || null;
+  return { apiKey, enabled: apiKey !== null && !values[ASK_DISABLED_KEY] };
 }
 
 export async function getSettings(

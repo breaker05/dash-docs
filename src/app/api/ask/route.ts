@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
-import { getAnthropicApiKey } from "@/server/settings";
+import { getAskConfig } from "@/server/settings";
 import { buildAskPrompt, trimHistory, type AskSource } from "@/lib/ask-prompt";
 import {
   checkRateLimit,
@@ -24,9 +24,9 @@ const MODEL = "claude-haiku-4-5";
  * one {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
-  const apiKey = await getAnthropicApiKey(db);
-  if (!apiKey) {
-    return Response.json({ error: "Ask is not configured" }, { status: 503 });
+  const { apiKey, enabled } = await getAskConfig(db);
+  if (!apiKey || !enabled) {
+    return Response.json({ error: "Ask is not available" }, { status: 503 });
   }
 
   const session = await auth();

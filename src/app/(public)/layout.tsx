@@ -4,7 +4,7 @@ import { Search, Sparkles } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { getPublicNav } from "@/server/pages/nav";
-import { GA_ID_KEY, getAnthropicApiKey, getSettings } from "@/server/settings";
+import { GA_ID_KEY, getAskConfig, getSettings } from "@/server/settings";
 import { PublicNav } from "@/components/public/nav";
 import { MobileNav } from "@/components/public/mobile-nav";
 import {
@@ -40,10 +40,10 @@ export default async function PublicLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const [nav, settings, askKey] = await Promise.all([
+  const [nav, settings, ask] = await Promise.all([
     getPublicNav(db, Boolean(session?.user)),
     getSettings(db, [GA_ID_KEY]),
-    getAnthropicApiKey(db),
+    getAskConfig(db),
   ]);
   const gaId = settings[GA_ID_KEY];
 
@@ -108,7 +108,7 @@ export default async function PublicLayout({
         </aside>
         <main className="min-w-0 flex-1 py-10">{children}</main>
       </div>
-      {askKey && <AskDocs />}
+      {ask.enabled && <AskDocs />}
       <Toaster />
       <footer className="border-t">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-sm text-muted-foreground lg:px-8">

@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
+  ASK_DISABLED_KEY,
   GA_ID_KEY,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
@@ -61,6 +62,18 @@ export async function updateAnthropicKeyAction(opts: { value: string }) {
   await setSetting(db, {
     key: ANTHROPIC_KEY_SETTING,
     value,
+    userId: user.id,
+  });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function setAskEnabledAction(opts: { enabled: boolean }) {
+  const user = await requireAdmin();
+  // empty value deletes the flag → enabled; any value → disabled
+  await setSetting(db, {
+    key: ASK_DISABLED_KEY,
+    value: opts.enabled ? "" : "true",
     userId: user.id,
   });
   revalidatePath("/admin/settings");
