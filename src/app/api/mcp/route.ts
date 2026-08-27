@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
 import { verifyApiKey } from "@/server/api-keys";
+import { normalizePagePath } from "@/lib/page-path";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,9 +33,9 @@ function buildHandler(includeInternal: boolean) {
       {
         title: "Search Dash Marketing docs",
         description:
-          `Full-text search over the published Dash Marketing documentation (API reference, guides). Returns matching pages with paths and snippets; fetch full content with get_page.${scopeNote}`,
+          `Full-text search over the published Dash Marketing documentation (API reference, guides). Returns matching pages with paths and snippets; fetch full content with get_page. The query runs as a parameterized Postgres full-text search (websearch_to_tsquery) — input is bound as a query value, never interpolated into SQL.${scopeNote}`,
         inputSchema: z.object({
-          query: z.string().min(1).describe("Search terms"),
+          query: z.string().min(1).max(200).describe("Search terms"),
           limit: z.number().int().min(1).max(50).optional(),
         }),
       },
@@ -62,20 +63,33 @@ function buildHandler(includeInternal: boolean) {
       {
         title: "Get a docs page",
         description:
-          `Fetch the full markdown content of a published documentation page by its path (as returned by search_docs or list_pages).${scopeNote}`,
+          `Fetch the full markdown content of a published documentation page by its path (as returned by search_docs or list_pages). The path is a page identifier — slug segments separated by "/" — used as a parameterized database key, never a filesystem path. Input is normalized and validated server-side (lowercased; only letters, digits, dashes, and underscores per segment); dots, backslashes, and traversal sequences are rejected.${scopeNote}`,
         inputSchema: z.object({
-          path: z.string().describe("Page path, e.g. lead-submission-api"),
+          path: z
+            .string()
+            .min(1)
+            .max(300)
+            .describe("Page path, e.g. lead-submission-api"),
         }),
       },
       async ({ path }) => {
+        const normalized = normalizePagePath(path);
+        if (!normalized) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: 'Invalid page path. Paths are slug identifiers like "api-documentation/lead-submission-api" — segments of letters, digits, dashes, and underscores separated by "/".',
+              },
+            ],
+            isError: true,
+          };
+        }
         const [page] = await db
           .select()
           .from(pages)
           .where(
-            and(
-              eq(pages.path, path.replace(/^\//, "")),
-              publishedFilter(includeInternal),
-            ),
+            and(eq(pages.path, normalized), publishedFilter(includeInternal)),
           );
         if (!page) {
           return {

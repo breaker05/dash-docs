@@ -24,7 +24,9 @@ export async function searchPages(
     tagSlug?: string;
   },
 ): Promise<SearchHit[]> {
-  const query = opts.query.trim();
+  // length cap is defense in depth — the query is only ever a bound
+  // parameter to websearch_to_tsquery, never interpolated into SQL
+  const query = opts.query.trim().slice(0, 200);
   if (!query) return [];
   const limit = Math.min(Math.max(opts.limit ?? 20, 1), 50);
 
