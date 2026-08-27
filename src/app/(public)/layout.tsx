@@ -11,6 +11,7 @@ import {
   SearchPalette,
   type PaletteItem,
 } from "@/components/search-palette";
+import { AskDocs } from "@/components/public/ask-docs";
 import type { NavNode } from "@/server/pages/nav";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { Button } from "@/components/ui/button";
@@ -106,6 +107,7 @@ export default async function PublicLayout({
         </aside>
         <main className="min-w-0 flex-1 py-10">{children}</main>
       </div>
+      {process.env.ANTHROPIC_API_KEY && <AskDocs />}
       <Toaster />
       <footer className="border-t">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-sm text-muted-foreground lg:px-8">

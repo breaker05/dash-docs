@@ -49,6 +49,13 @@ Tailwind + shadcn/ui · Vercel.
   Admin → Settings, per-page opt-out in the editor
 - **Google Analytics** — paste a GA4 measurement ID (or the whole gtag
   snippet) in Admin → Settings; loads on public pages only
+- **Ask AI** — retrieval-grounded chat over the docs (Claude API; set
+  `ANTHROPIC_API_KEY` to enable) with cited sources; signed-in team members
+  transparently get internal pages in retrieval
+- **⌘K palette**, **/changelog** + weekly Slack digest (webhook in
+  Settings, `CRON_SECRET` + vercel.json cron), **"Was this helpful?"**
+  votes and zero-result-search reporting in Admin → Insights, and
+  **section → PDF book** export (cover, TOC, continuous page numbers)
 
 ## Local development
 

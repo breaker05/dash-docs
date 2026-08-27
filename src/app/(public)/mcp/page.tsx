@@ -118,7 +118,8 @@ export default function McpPage() {
           /llms.txt
         </a>{" "}
         indexes everything for tools that discover docs automatically.
-        There&apos;s also a “Copy for LLM” action on every page.
+        There&apos;s also a “Copy for LLM” action on every page, and the
+        “Ask AI” chat in the corner answers questions with cited sources.
       </p>
       <h2 className="mb-3 mt-10 text-lg font-semibold tracking-tight">
         Team access to internal docs
