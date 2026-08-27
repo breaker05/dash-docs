@@ -11,7 +11,9 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}"],
     // PGlite (WASM Postgres) instances start slowly when many test files
-    // run in parallel alongside a dev server
-    testTimeout: 20_000,
+    // run in parallel alongside a dev server; cap concurrency so cold
+    // starts don't stampede each other, and give them generous headroom
+    testTimeout: 30_000,
+    maxWorkers: 6,
   },
 });
