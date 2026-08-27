@@ -138,7 +138,10 @@ claude mcp add --transport http dash-docs https://docs.dashmarketing.io/api/mcp 
 ```
 
 A presented-but-invalid key is rejected with `401` — it is never silently
-downgraded to public-only results.
+downgraded to public-only results. Keyed connections additionally get
+`list_context_files` / `get_context_file` for **AI context files** —
+reference files (e.g. an OpenAPI/Swagger spec) uploaded under Admin →
+AI context that feed Ask AI retrieval and MCP without ever being pages.
 
 ### Input handling
 

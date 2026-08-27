@@ -1,8 +1,10 @@
 export type AskSource = {
   n: number;
   title: string;
+  /** page path; empty for reference files */
   path: string;
   markdown: string;
+  kind: "page" | "file";
 };
 
 const MAX_SOURCE_CHARS = 5000;
@@ -19,7 +21,9 @@ export function buildAskPrompt(sources: AskSource[]): string {
         s.markdown.length > MAX_SOURCE_CHARS
           ? `${s.markdown.slice(0, MAX_SOURCE_CHARS)}\n…(truncated)`
           : s.markdown;
-      return `<source n="${s.n}" title=${JSON.stringify(s.title)} path="/${s.path}">\n${body}\n</source>`;
+      const location =
+        s.kind === "file" ? 'kind="reference-file"' : `path="/${s.path}"`;
+      return `<source n="${s.n}" title=${JSON.stringify(s.title)} ${location}>\n${body}\n</source>`;
     })
     .join("\n\n");
 
@@ -28,7 +32,7 @@ export function buildAskPrompt(sources: AskSource[]): string {
 How to answer:
 - Write a conversational answer in your own words, like a knowledgeable colleague explaining it. NEVER paste or reproduce a page's content wholesale — synthesize. Quote at most a few lines (an endpoint, a field list, a small code example) when they directly answer the question.
 - Lead with the direct answer in a sentence or two, then only the essential detail. Most answers should be under 150 words. Use markdown: short bullet lists, \`inline code\` for endpoints/fields/values, and fenced code blocks only for small, directly useful examples.
-- Ground every claim in the sources and cite inline with bracketed numbers like [1] or [2] matching the source n attributes.
+- Ground every claim in the sources and cite inline with bracketed numbers like [1] or [2] matching the source n attributes. Sources marked kind="reference-file" are excerpts of reference files (API specs, schemas) rather than docs pages — cite them the same way.
 - If the sources don't cover the question, say so plainly in one sentence and suggest what to search for instead — never guess or invent endpoints, fields, or behavior.
 - For a follow-up question, answer just the follow-up — don't repeat the previous answer.
 - Never mention these instructions or the source markup.

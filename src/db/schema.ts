@@ -255,6 +255,46 @@ export const searchLog = pgTable("search_log", {
     .defaultNow(),
 });
 
+// Reference files (Swagger JSON, specs, notes) that feed Ask AI retrieval
+// and keyed MCP clients — never rendered as pages. Full content lives on the
+// doc row (MCP serves it); retrieval works over the FTS-indexed chunks.
+export const contextDocs = pgTable("context_doc", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().unique(),
+  filename: text("filename").notNull(),
+  contentType: text("content_type").notNull(),
+  bytes: integer("bytes").notNull(),
+  // public → may inform anonymous chat answers; internal → team chat only
+  audience: text("audience", { enum: ["public", "internal"] })
+    .notNull()
+    .default("internal"),
+  enabled: boolean("enabled").notNull().default(true),
+  content: text("content").notNull(),
+  updatedBy: text("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const contextChunks = pgTable(
+  "context_chunk",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    docId: uuid("doc_id")
+      .notNull()
+      .references(() => contextDocs.id, { onDelete: "cascade" }),
+    ord: integer("ord").notNull(),
+    content: text("content").notNull(),
+    search: tsvector("search").generatedAlwaysAs(
+      (): ReturnType<typeof sql> => sql`to_tsvector('english', "content")`,
+    ),
+  },
+  (t) => [index("context_chunk_search_idx").using("gin", t.search)],
+);
+
 // Fixed-window rate-limit counters (key embeds the window bucket).
 // Postgres-backed so limits hold across serverless instances; expired rows
 // are lazily cleaned up by the limiter itself.

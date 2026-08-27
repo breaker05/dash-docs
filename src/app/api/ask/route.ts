@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
+import { searchContextChunks } from "@/server/context-docs";
 import { getAskConfig } from "@/server/settings";
 import {
   buildAskPrompt,
@@ -103,17 +104,44 @@ export async function POST(request: Request) {
                 : eq(pages.effectiveVisibility, "public"),
             ),
           );
-  // keep search's relevance order
+  // keep search's relevance order; reference-file chunks fill after pages
+  // (same precise-then-recall fallback as pages — conversational phrasing
+  // rarely AND-matches inside a spec file)
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const sources: AskSource[] = hits
-    .map((h) => byId.get(h.id))
-    .filter((r): r is NonNullable<typeof r> => Boolean(r))
-    .map((r, i) => ({
-      n: i + 1,
-      title: r.title ?? "Untitled",
-      path: r.path,
-      markdown: r.markdown ?? "",
-    }));
+  let chunkHits = await searchContextChunks(db, {
+    query: question,
+    includeInternal,
+    limit: 3,
+  });
+  if (chunkHits.length === 0) {
+    const orQuery = buildOrQuery(question);
+    if (orQuery !== "") {
+      chunkHits = await searchContextChunks(db, {
+        query: orQuery,
+        includeInternal,
+        limit: 3,
+      });
+    }
+  }
+  const sources: AskSource[] = [
+    ...hits
+      .map((h) => byId.get(h.id))
+      .filter((r): r is NonNullable<typeof r> => Boolean(r))
+      .map((r) => ({
+        title: r.title ?? "Untitled",
+        path: r.path,
+        markdown: r.markdown ?? "",
+        kind: "page" as const,
+      })),
+    ...chunkHits.map((c) => ({
+      title: `${c.docName} (part ${c.ord + 1})`,
+      path: "",
+      markdown: c.content,
+      kind: "file" as const,
+    })),
+  ]
+    .slice(0, 6)
+    .map((s, i) => ({ ...s, n: i + 1 }));
 
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
@@ -146,6 +174,7 @@ export async function POST(request: Request) {
             n: s.n,
             title: s.title,
             path: s.path,
+            kind: s.kind,
           })),
         });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));

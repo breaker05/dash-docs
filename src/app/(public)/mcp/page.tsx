@@ -137,7 +137,13 @@ export default function McpPage() {
       <p className="text-xs text-muted-foreground">
         Without a key, the MCP server only exposes published, public pages —
         never drafts or internal content. Invalid keys are rejected rather
-        than downgraded.
+        than downgraded. Keyed connections also get{" "}
+        <code className="rounded bg-muted px-1 py-0.5">
+          list_context_files
+        </code>{" "}
+        and{" "}
+        <code className="rounded bg-muted px-1 py-0.5">get_context_file</code>{" "}
+        for the team&apos;s uploaded reference files (API specs, schemas).
       </p>
     </div>
   );

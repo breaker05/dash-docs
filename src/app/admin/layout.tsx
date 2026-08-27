@@ -13,7 +13,14 @@ import { Button } from "@/components/ui/button";
 import { DashLogo } from "@/components/brand/dash-logo";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
-import { ExternalLink, Lightbulb, Settings, Tags, Users } from "lucide-react";
+import {
+  ExternalLink,
+  Lightbulb,
+  Paperclip,
+  Settings,
+  Tags,
+  Users,
+} from "lucide-react";
 
 function toPaletteItems(
   nodes: TreeNode[],
@@ -144,6 +151,12 @@ export default async function AdminLayout({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <Users className="size-4" /> Team
+              </Link>
+              <Link
+                href="/admin/context"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Paperclip className="size-4" /> AI context
               </Link>
               <Link
                 href="/admin/settings"

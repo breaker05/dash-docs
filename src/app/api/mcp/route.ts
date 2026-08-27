@@ -5,6 +5,10 @@ import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
 import { verifyApiKey } from "@/server/api-keys";
+import {
+  getContextDocByName,
+  listContextDocsForMcp,
+} from "@/server/context-docs";
 import { normalizePagePath } from "@/lib/page-path";
 import {
   checkRateLimit,
@@ -163,6 +167,70 @@ function buildHandler(includeInternal: boolean) {
         };
       },
     );
+
+    // reference files (API specs, schemas) — authorized (keyed) access only
+    if (includeInternal) {
+      server.registerTool(
+        "list_context_files",
+        {
+          title: "List reference context files",
+          description:
+            "List the team's uploaded reference files (API specs, schemas, notes) that supplement the docs — not pages. Fetch one with get_context_file.",
+          inputSchema: z.object({}),
+        },
+        async () => {
+          const docs = await listContextDocsForMcp(db);
+          const text =
+            docs.length === 0
+              ? "No context files uploaded."
+              : docs
+                  .map(
+                    (d) =>
+                      `- ${d.name} (${d.filename}, ${d.contentType}, ${d.bytes} bytes)`,
+                  )
+                  .join("\n");
+          return { content: [{ type: "text", text }] };
+        },
+      );
+
+      server.registerTool(
+        "get_context_file",
+        {
+          title: "Get a reference context file",
+          description:
+            "Fetch the full content of an uploaded reference file by its name (as returned by list_context_files) — e.g. the API's OpenAPI/Swagger spec.",
+          inputSchema: z.object({
+            name: z
+              .string()
+              .min(1)
+              .max(200)
+              .describe("File name, e.g. Dash API Swagger"),
+          }),
+        },
+        async ({ name }) => {
+          const doc = await getContextDocByName(db, name);
+          if (!doc) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: `No context file named "${name}". Use list_context_files to see what's available.`,
+                },
+              ],
+              isError: true,
+            };
+          }
+          return {
+            content: [
+              {
+                type: "text",
+                text: `# ${doc.name} (${doc.filename})\n\n${doc.content}`,
+              },
+            ],
+          };
+        },
+      );
+    }
   });
 }
 

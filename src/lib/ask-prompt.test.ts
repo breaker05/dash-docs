@@ -15,8 +15,9 @@ describe("buildOrQuery", () => {
 describe("buildAskPrompt", () => {
   it("numbers sources, includes paths, truncates long content", () => {
     const prompt = buildAskPrompt([
-      { n: 1, title: "Lead API", path: "api/lead", markdown: "POST /lead/submit" },
-      { n: 2, title: 'Say "hi"', path: "guides/hi", markdown: "x".repeat(6000) },
+      { n: 1, title: "Lead API", path: "api/lead", markdown: "POST /lead/submit", kind: "page" },
+      { n: 2, title: 'Say "hi"', path: "guides/hi", markdown: "x".repeat(6000), kind: "page" },
+      { n: 3, title: "swagger.json (part 2)", path: "", markdown: '{"paths":{}}', kind: "file" },
     ]);
     expect(prompt).toContain('<source n="1" title="Lead API" path="/api/lead">');
     expect(prompt).toContain("POST /lead/submit");
@@ -25,6 +26,10 @@ describe("buildAskPrompt", () => {
     expect(prompt).toContain("…(truncated)");
     expect(prompt).not.toContain("x".repeat(5001));
     expect(prompt).toContain("ONLY the documentation sources");
+    // reference files carry a kind marker instead of a path
+    expect(prompt).toContain(
+      '<source n="3" title="swagger.json (part 2)" kind="reference-file">',
+    );
   });
 });
 

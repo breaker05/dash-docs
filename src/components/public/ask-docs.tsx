@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { CornerDownLeft, Sparkles } from "lucide-react";
+import { CornerDownLeft, Paperclip, Sparkles } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -14,7 +14,12 @@ import { AnswerMarkdown } from "@/components/public/answer-markdown";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type Source = { n: number; title: string; path: string };
+type Source = {
+  n: number;
+  title: string;
+  path: string;
+  kind?: "page" | "file";
+};
 type Turn = {
   role: "user" | "assistant";
   content: string;
@@ -168,16 +173,26 @@ export function AskDocs() {
               )}
               {turn.sources && turn.sources.length > 0 && (
                 <span className="mt-2.5 flex flex-wrap gap-1.5">
-                  {turn.sources.map((s) => (
-                    <Link
-                      key={s.n}
-                      href={`/${s.path}`}
-                      onClick={() => setOpen(false)}
-                      className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground"
-                    >
-                      [{s.n}] {s.title}
-                    </Link>
-                  ))}
+                  {turn.sources.map((s) =>
+                    s.kind === "file" ? (
+                      <span
+                        key={s.n}
+                        className="flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+                        title="Reference file"
+                      >
+                        <Paperclip className="size-3" /> [{s.n}] {s.title}
+                      </span>
+                    ) : (
+                      <Link
+                        key={s.n}
+                        href={`/${s.path}`}
+                        onClick={() => setOpen(false)}
+                        className="rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-ring/50 hover:text-foreground"
+                      >
+                        [{s.n}] {s.title}
+                      </Link>
+                    ),
+                  )}
                 </span>
               )}
             </div>
