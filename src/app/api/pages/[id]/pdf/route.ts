@@ -14,6 +14,11 @@ import {
   PDF_LOGO_KEY,
 } from "@/server/settings";
 import { siteUrl } from "@/lib/site-url";
+import {
+  checkRateLimit,
+  rateLimitedResponse,
+  requestIp,
+} from "@/server/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,6 +27,15 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // PDF rendering launches Chromium — the most expensive endpoint we have,
+  // so it gets a tight per-IP limit
+  const limit = await checkRateLimit(db, {
+    key: `pdf:ip:${requestIp(request)}`,
+    limit: 10,
+    windowSeconds: 60,
+  });
+  if (!limit.allowed) return rateLimitedResponse(limit);
+
   const { id } = await params;
   const version =
     new URL(request.url).searchParams.get("version") === "draft"

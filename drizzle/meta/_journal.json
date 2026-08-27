@@ -29,6 +29,13 @@
       "when": 1787790756569,
       "tag": "0003_goofy_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787792234977,
+      "tag": "0004_glorious_yellow_claw",
+      "breakpoints": true
     }
   ]
 }

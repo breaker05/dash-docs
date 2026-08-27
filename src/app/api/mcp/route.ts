@@ -6,6 +6,11 @@ import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
 import { verifyApiKey } from "@/server/api-keys";
 import { normalizePagePath } from "@/lib/page-path";
+import {
+  checkRateLimit,
+  rateLimitedResponse,
+  requestIp,
+} from "@/server/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -171,14 +176,33 @@ async function handler(request: Request): Promise<Response> {
     const key = match ? await verifyApiKey(db, match[1].trim()) : null;
     if (!key) {
       // a presented-but-invalid credential is an error, never a silent
-      // downgrade to public-only results
+      // downgrade to public-only results — and invalid attempts are
+      // rate-limited by IP to slow down key guessing
+      const limit = await checkRateLimit(db, {
+        key: `mcp:badauth:${requestIp(request)}`,
+        limit: 10,
+        windowSeconds: 60,
+      });
+      if (!limit.allowed) return rateLimitedResponse(limit);
       return Response.json(
         { error: "Invalid or revoked API key" },
         { status: 401 },
       );
     }
+    const limit = await checkRateLimit(db, {
+      key: `mcp:key:${key.id}`,
+      limit: 300,
+      windowSeconds: 60,
+    });
+    if (!limit.allowed) return rateLimitedResponse(limit);
     return internalHandler(request);
   }
+  const limit = await checkRateLimit(db, {
+    key: `mcp:ip:${requestIp(request)}`,
+    limit: 60,
+    windowSeconds: 60,
+  });
+  if (!limit.allowed) return rateLimitedResponse(limit);
   return publicHandler(request);
 }
 

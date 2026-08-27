@@ -213,6 +213,15 @@ export const settings = pgTable("setting", {
     .defaultNow(),
 });
 
+// Fixed-window rate-limit counters (key embeds the window bucket).
+// Postgres-backed so limits hold across serverless instances; expired rows
+// are lazily cleaned up by the limiter itself.
+export const rateLimits = pgTable("rate_limit", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(1),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+});
+
 // API keys for machine access (MCP internal docs). Only a SHA-256 hash of
 // the key is stored; the raw key is shown once at creation.
 export const apiKeys = pgTable("api_key", {
