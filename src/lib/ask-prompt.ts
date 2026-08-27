@@ -36,6 +36,22 @@ How to answer:
 ${rendered}`;
 }
 
+/**
+ * Recall-mode form of a conversational question for websearch_to_tsquery.
+ * The default parse ANDs every non-stopword ("do you know about the Import
+ * Rules page" requires a doc containing "know"), which kills retrieval for
+ * chatty phrasing — OR the significant words instead and let ts_rank_cd
+ * (title matches weigh heaviest) surface the right pages.
+ */
+export function buildOrQuery(question: string): string {
+  const words = question
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2 && w.toLowerCase() !== "or")
+    .slice(0, 12);
+  return [...new Set(words.map((w) => w.toLowerCase()))].join(" or ");
+}
+
 /** Trim chat history to the last few turns, alternating user/assistant. */
 export function trimHistory(
   history: { role: "user" | "assistant"; content: string }[],

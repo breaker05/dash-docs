@@ -5,7 +5,12 @@ import { db } from "@/db";
 import { pages } from "@/db/schema";
 import { searchPages } from "@/server/search";
 import { getAskConfig } from "@/server/settings";
-import { buildAskPrompt, trimHistory, type AskSource } from "@/lib/ask-prompt";
+import {
+  buildAskPrompt,
+  buildOrQuery,
+  trimHistory,
+  type AskSource,
+} from "@/lib/ask-prompt";
 import {
   checkRateLimit,
   rateLimitedResponse,
@@ -51,13 +56,30 @@ export async function POST(request: Request) {
     return Response.json({ error: "question is required" }, { status: 400 });
   }
 
-  // retrieval: top search hits, then their full published markdown
+  // retrieval: precise (AND) search first; when conversational phrasing
+  // leaves it thin, fill from a recall-mode (OR) search — ranking puts
+  // title matches first
   const includeInternal = Boolean(session?.user);
   const hits = await searchPages(db, {
     query: question,
     includeInternal,
     limit: 5,
   });
+  if (hits.length < 3) {
+    const orQuery = buildOrQuery(question);
+    if (orQuery !== "") {
+      const seen = new Set(hits.map((h) => h.id));
+      const broad = await searchPages(db, {
+        query: orQuery,
+        includeInternal,
+        limit: 5,
+      });
+      for (const hit of broad) {
+        if (hits.length >= 5) break;
+        if (!seen.has(hit.id)) hits.push(hit);
+      }
+    }
+  }
   const rows =
     hits.length === 0
       ? []

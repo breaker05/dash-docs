@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildAskPrompt, trimHistory } from "./ask-prompt";
+import { buildAskPrompt, buildOrQuery, trimHistory } from "./ask-prompt";
+
+describe("buildOrQuery", () => {
+  it("ORs significant words for recall-mode retrieval", () => {
+    expect(buildOrQuery("do you know about the Import Rules page?")).toBe(
+      "you or know or about or the or import or rules or page",
+    );
+    expect(buildOrQuery("a of it")).toBe("");
+    // dedupes and drops literal "or"
+    expect(buildOrQuery("rules or rules")).toBe("rules");
+  });
+});
 
 describe("buildAskPrompt", () => {
   it("numbers sources, includes paths, truncates long content", () => {
