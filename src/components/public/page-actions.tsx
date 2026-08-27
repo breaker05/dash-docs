@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import {
+  BookText,
   Bot,
   Check,
   ChevronDown,
@@ -41,12 +42,14 @@ export function PageActions({
   title,
   markdown,
   isInternal,
+  hasChildren = false,
 }: {
   pageId: string;
   path: string;
   title: string;
   markdown: string;
   isInternal: boolean;
+  hasChildren?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -135,6 +138,21 @@ export function PageActions({
             >
               <Download className="size-4" /> Download PDF
             </DropdownMenuItem>
+            {hasChildren && (
+              <DropdownMenuItem
+                onClick={() =>
+                  window.open(
+                    `/api/pages/${pageId}/pdf?scope=section`,
+                    "_blank",
+                  )
+                }
+              >
+                <BookText className="size-4" /> Section as PDF book
+                <span className="ml-auto text-[0.65rem] text-muted-foreground">
+                  cover + TOC
+                </span>
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
 
           {!isInternal && (

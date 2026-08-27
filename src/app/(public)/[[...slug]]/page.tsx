@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { Lock, Tag as TagIcon } from "lucide-react";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -91,7 +91,16 @@ export default async function PublicPage({
     if (!session?.user) notFound();
   }
 
-  const pageTags = await getTagsForPage(db, page.id);
+  const [pageTags, publishedChildren] = await Promise.all([
+    getTagsForPage(db, page.id),
+    db
+      .select({ id: pages.id })
+      .from(pages)
+      .where(
+        and(eq(pages.parentId, page.id), isNotNull(pages.publishedContentMd)),
+      )
+      .limit(1),
+  ]);
 
   return (
     <article className="mx-auto max-w-3xl">
@@ -117,6 +126,7 @@ export default async function PublicPage({
               title={page.publishedTitle ?? page.title}
               markdown={page.publishedContentMd}
               isInternal={page.effectiveVisibility === "internal"}
+              hasChildren={publishedChildren.length > 0}
             />
           </div>
         </div>

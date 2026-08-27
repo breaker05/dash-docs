@@ -150,6 +150,14 @@ export function MetadataPanel({
         >
           Download draft as PDF
         </a>
+        {page.published && (
+          <a
+            href={`/api/pages/${page.id}/pdf?scope=section`}
+            className="block text-xs text-primary hover:underline"
+          >
+            Section as PDF book (published pages)
+          </a>
+        )}
         <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"

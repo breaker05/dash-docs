@@ -43,3 +43,41 @@ describe("mergePdfs", () => {
     expect(doc.getPage(1).getWidth()).toBe(300);
   });
 });
+
+describe("buildTocHtml", () => {
+  it("renders escaped entries with depth indentation and page numbers", async () => {
+    const { buildTocHtml } = await import("./cover");
+    const html = buildTocHtml({
+      sectionTitle: "API <Docs>",
+      entries: [
+        { title: "Overview", depth: 0, page: 1 },
+        { title: "Lead & Submit", depth: 1, page: 3 },
+      ],
+    });
+    expect(html).toContain("API &lt;Docs&gt;");
+    expect(html).toContain("Lead &amp; Submit");
+    expect(html).toContain('padding-left:18px');
+    expect(html).toContain("<span class=\"n\">3</span>");
+  });
+});
+
+describe("stampFooters / winAnsiSafe", () => {
+  it("stamps footers on content pages only", async () => {
+    const { stampFooters, countPages, mergePdfs, winAnsiSafe } = await import(
+      "./merge"
+    );
+    const { PDFDocument } = await import("pdf-lib");
+    const make = async (n: number) => {
+      const d = await PDFDocument.create();
+      for (let i = 0; i < n; i++) d.addPage([612, 792]);
+      return d.save();
+    };
+    const merged = await mergePdfs([await make(2), await make(3)]);
+    const stamped = await stampFooters(merged, {
+      leftText: "Guide — Dash Docs ⟪drop⟫",
+      skipPages: 2,
+    });
+    expect(await countPages(stamped)).toBe(5);
+    expect(winAnsiSafe("Guide — Dash ⟪x⟫ Café")).toBe("Guide — Dash x Café");
+  });
+});

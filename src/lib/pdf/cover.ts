@@ -14,8 +14,8 @@ function escapeHtml(s: string): string {
 
 export function buildCoverHtml(opts: {
   title: string;
-  /** data: URI or absolute URL for the logo image */
-  logoSrc: string;
+  /** data: URI or absolute URL for the logo image; omit for a text-only cover */
+  logoSrc?: string | null;
   siteName?: string;
   date?: Date;
 }): string {
@@ -57,11 +57,52 @@ export function buildCoverHtml(opts: {
 </head>
 <body>
 <div class="cover">
-  <img class="logo" src="${escapeHtml(opts.logoSrc)}" alt="">
+  ${opts.logoSrc ? `<img class="logo" src="${escapeHtml(opts.logoSrc)}" alt="">` : ""}
   <h1>${escapeHtml(opts.title)}</h1>
   <div class="rule"></div>
   <p class="meta"><span>${escapeHtml(siteName)}</span><span>${escapeHtml(date)}</span></p>
 </div>
+</body>
+</html>`;
+}
+
+/** Table-of-contents page for section exports (dotted leaders, indented by depth). */
+export function buildTocHtml(opts: {
+  sectionTitle: string;
+  entries: { title: string; depth: number; page: number }[];
+}): string {
+  const rows = opts.entries
+    .map(
+      (e) => `<li style="padding-left:${e.depth * 18}px">
+  <span class="t">${escapeHtml(e.title)}</span><span class="dots"></span><span class="n">${e.page}</span>
+</li>`,
+    )
+    .join("\n");
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1a1a1a; margin: 0; font-size: 12px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  p.sub { margin: 0 0 24px; color: #71717a; font-size: 11px; }
+  ol { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; align-items: baseline; gap: 8px; padding-top: 9px; }
+  .t { flex-shrink: 1; min-width: 0; }
+  .dots { flex: 1; border-bottom: 1px dotted #d4d4d8; }
+  .n { color: #71717a; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<h1>Contents</h1>
+<p class="sub">${escapeHtml(opts.sectionTitle)}</p>
+<ol>
+${rows}
+</ol>
 </body>
 </html>`;
 }

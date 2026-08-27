@@ -5,8 +5,12 @@ import { pages } from "@/db/schema";
 import { launchBrowser } from "@/lib/pdf/browser";
 import { renderPdfHtml } from "@/lib/pdf/render-html";
 import { buildPdfTemplate, defaultFooterTemplate } from "@/lib/pdf/chrome";
-import { buildCoverHtml, fetchLogoAsDataUri } from "@/lib/pdf/cover";
-import { mergePdfs } from "@/lib/pdf/merge";
+import {
+  buildCoverHtml,
+  buildTocHtml,
+  fetchLogoAsDataUri,
+} from "@/lib/pdf/cover";
+import { countPages, mergePdfs, stampFooters } from "@/lib/pdf/merge";
 import {
   getSettings,
   PDF_FOOTER_KEY,
@@ -37,10 +41,12 @@ export async function GET(
   if (!limit.allowed) return rateLimitedResponse(limit);
 
   const { id } = await params;
+  const url = new URL(request.url);
+  if (url.searchParams.get("scope") === "section") {
+    return sectionPdf(id);
+  }
   const version =
-    new URL(request.url).searchParams.get("version") === "draft"
-      ? "draft"
-      : "published";
+    url.searchParams.get("version") === "draft" ? "draft" : "published";
 
   const [page] = await db.select().from(pages).where(eq(pages.id, id));
   if (!page) return new Response("Not found", { status: 404 });
@@ -139,6 +145,157 @@ export async function GET(
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="${page.slug}${version === "draft" ? "-draft" : ""}.pdf"`,
+      },
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
+const SECTION_PAGE_CAP = 25;
+
+/**
+ * Whole-section export: logo cover + table of contents + every published
+ * page in the subtree, with continuous page numbers stamped after merging
+ * (Chromium numbers each rendered document separately).
+ */
+async function sectionPdf(rootId: string): Promise<Response> {
+  const all = await db
+    .select({
+      id: pages.id,
+      parentId: pages.parentId,
+      position: pages.position,
+      slug: pages.slug,
+      title: pages.publishedTitle,
+      contentMd: pages.publishedContentMd,
+      visibility: pages.effectiveVisibility,
+    })
+    .from(pages)
+    .orderBy(pages.position);
+
+  const byParent = new Map<string | null, typeof all>();
+  for (const row of all) {
+    if (!byParent.has(row.parentId)) byParent.set(row.parentId, []);
+    byParent.get(row.parentId)!.push(row);
+  }
+  const root = all.find((p) => p.id === rootId);
+  if (!root || root.contentMd === null) {
+    return new Response("Not found", { status: 404 });
+  }
+
+  const session = await auth();
+  // anonymous callers never see internal pages — including the root (404,
+  // not 401, to avoid leaking existence)
+  if (!session?.user && root.visibility === "internal") {
+    return new Response("Not found", { status: 404 });
+  }
+
+  type Row = (typeof all)[number];
+  const section: { row: Row; depth: number }[] = [];
+  const walk = (row: Row, depth: number) => {
+    if (!session?.user && row.visibility === "internal") return;
+    if (row.contentMd !== null) section.push({ row, depth });
+    for (const child of byParent.get(row.id) ?? []) walk(child, depth + 1);
+  };
+  walk(root, 0);
+
+  if (section.length > SECTION_PAGE_CAP) {
+    return new Response(
+      `Section too large for one export (${section.length} pages, cap ${SECTION_PAGE_CAP}). Export sub-sections instead.`,
+      { status: 413 },
+    );
+  }
+
+  const chrome = await getSettings(db, [PDF_LOGO_KEY]);
+  const logoSrc = chrome[PDF_LOGO_KEY]
+    ? await fetchLogoAsDataUri(chrome[PDF_LOGO_KEY])
+    : null;
+  const sectionTitle = root.title ?? "Untitled";
+
+  const browser = await launchBrowser();
+  try {
+    const browserPage = await browser.newPage();
+    const renderPdf = async (
+      html: string,
+      margins: { top: string; bottom: string; left: string; right: string },
+    ) => {
+      await browserPage.setContent(html, { waitUntil: "load" });
+      await browserPage
+        .evaluate(() =>
+          Promise.all(
+            Array.from(document.images)
+              .filter((img) => !img.complete)
+              .map(
+                (img) =>
+                  new Promise((resolve) => {
+                    img.onload = img.onerror = resolve;
+                  }),
+              ),
+          ),
+        )
+        .catch(() => {});
+      return new Uint8Array(
+        await browserPage.pdf({
+          format: "letter",
+          printBackground: true,
+          margin: margins,
+        }),
+      );
+    };
+
+    const contentMargins = {
+      top: "0.75in",
+      bottom: "0.9in",
+      left: "0.75in",
+      right: "0.75in",
+    };
+    const parts: Uint8Array[] = [];
+    const partPageCounts: number[] = [];
+    for (const { row } of section) {
+      const part = await renderPdf(
+        renderPdfHtml({
+          title: row.title ?? "Untitled",
+          markdown: row.contentMd!,
+        }),
+        contentMargins,
+      );
+      parts.push(part);
+      partPageCounts.push(await countPages(part));
+    }
+
+    // content page numbers start at 1 after the front matter
+    let cursor = 1;
+    const tocEntries = section.map(({ row, depth }, i) => {
+      const entry = {
+        title: row.title ?? "Untitled",
+        depth,
+        page: cursor,
+      };
+      cursor += partPageCounts[i];
+      return entry;
+    });
+
+    const coverPdf = await renderPdf(
+      buildCoverHtml({ title: sectionTitle, logoSrc }),
+      { top: "0", bottom: "0", left: "0", right: "0" },
+    );
+    const tocPdf = await renderPdf(
+      buildTocHtml({ sectionTitle, entries: tocEntries }),
+      contentMargins,
+    );
+    const frontMatter =
+      (await countPages(coverPdf)) + (await countPages(tocPdf));
+
+    const merged = await mergePdfs([coverPdf, tocPdf, ...parts]);
+    const stamped = await stampFooters(merged, {
+      leftText: `${sectionTitle} — Dash Marketing Docs`,
+      skipPages: frontMatter,
+    });
+
+    return new Response(new Uint8Array(stamped), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="${root.slug}-section.pdf"`,
       },
     });
   } finally {
