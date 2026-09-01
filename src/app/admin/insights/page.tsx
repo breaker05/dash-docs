@@ -10,6 +10,9 @@ export const metadata = { title: "Insights — Dash Docs" };
 
 export default async function InsightsPage() {
   await requireUser();
+  // Server Component: Date.now() at request time is correct — the purity rule
+  // targets client render, where re-renders would make it unstable.
+  // eslint-disable-next-line react-hooks/purity
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const [gaps, topQueries, feedbackTotals, recentComments, brokenLinks] =

@@ -258,6 +258,13 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
                   Answers come straight from the documentation, with sources
                   cited — ask anything about the Dash Marketing platform or API.
                 </p>
+                <p className="text-xs leading-relaxed text-muted-foreground/80">
+                  Conversations are saved to help improve the docs and are
+                  automatically deleted after 60 days
+                  {isSignedIn
+                    ? " — yours are under History above."
+                    : "."}
+                </p>
                 <div className="space-y-1.5">
                   {SUGGESTIONS.map((s) => (
                     <button

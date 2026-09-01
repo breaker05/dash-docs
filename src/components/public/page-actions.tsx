@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BookText,
   Bot,
@@ -52,6 +53,7 @@ export function PageActions({
   hasChildren?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const router = useRouter();
 
   const pageUrl = () =>
     typeof window === "undefined" ? `/${path}` : window.location.href;
@@ -182,9 +184,7 @@ export function PageActions({
                 >
                   <Bot className="size-4" /> ChatGPT
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => (window.location.href = "/mcp")}
-                >
+                <DropdownMenuItem onClick={() => router.push("/mcp")}>
                   <Sparkles className="size-4" /> Any MCP client…
                 </DropdownMenuItem>
               </DropdownMenuGroup>

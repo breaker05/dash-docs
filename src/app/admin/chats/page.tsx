@@ -42,7 +42,8 @@ export default async function ChatsPage({
       <p className="mb-5 text-[0.95rem] leading-relaxed text-muted-foreground">
         Every “Ask AI” conversation, newest first. Anonymous visitors&rsquo;
         chats are logged here for review; signed-in team members&rsquo; chats
-        show their name.
+        show their name. Conversations are deleted 60 days after their last
+        message.
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

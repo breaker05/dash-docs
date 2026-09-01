@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import {
   conversations,
@@ -227,4 +227,24 @@ export async function deleteConversation(
     .where(eq(conversations.id, conversationId))
     .returning({ id: conversations.id });
   return deleted.length > 0;
+}
+
+/**
+ * Retention: delete conversations with no activity for `olderThanDays` (by
+ * lastMessageAt); their messages cascade. Returns the number removed. Run on a
+ * schedule — see /api/purge-chats.
+ */
+export async function purgeOldConversations(
+  db: Db,
+  opts: { olderThanDays: number; now?: Date },
+): Promise<number> {
+  const cutoff = new Date(
+    (opts.now ?? new Date()).getTime() -
+      opts.olderThanDays * 24 * 60 * 60 * 1000,
+  );
+  const deleted = await db
+    .delete(conversations)
+    .where(lt(conversations.lastMessageAt, cutoff))
+    .returning({ id: conversations.id });
+  return deleted.length;
 }

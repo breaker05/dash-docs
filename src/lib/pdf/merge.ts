@@ -18,7 +18,7 @@ export async function countPages(pdf: Uint8Array): Promise<number> {
 /** Standard Helvetica can only encode WinAnsi — strip anything else. */
 export function winAnsiSafe(s: string): string {
   // ASCII + Latin-1 + the common typographic marks WinAnsi carries
-  // eslint-disable-next-line no-misleading-character-class
+   
   return s.replace(
     /[^\x20-\x7e\u00a0-\u00ff\u2013\u2014\u2018\u2019\u201c\u201d\u2022\u2026]/g,
     "",

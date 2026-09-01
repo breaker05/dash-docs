@@ -13,9 +13,12 @@ export function PageFeedback({ pageId }: { pageId: string }) {
   const [comment, setComment] = useState("");
   const [sending, setSending] = useState(false);
 
-  // soft dedupe: remember votes per page in this browser
+  // soft dedupe: remember votes per page in this browser. Reading localStorage
+  // must happen after hydration (not in a lazy initializer) or the server HTML
+  // and first client render disagree — the effect is the correct pattern here.
   useEffect(() => {
     try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (window.localStorage.getItem(`voted:${pageId}`)) setStage("done");
     } catch {
       // storage unavailable — voting still works

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -51,34 +51,35 @@ export function SearchPalette({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<RemoteResult[]>([]);
-  const fetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openRef = useRef(open);
+
+  // Route every open/close through here so closing resets the palette in the
+  // same event that closed it — no separate effect syncing off `open`.
+  const changeOpen = useCallback((next: boolean) => {
+    openRef.current = next;
+    setOpen(next);
+    if (!next) {
+      setQuery("");
+      setRemote([]);
+    }
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
+        changeOpen(!openRef.current);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [changeOpen]);
 
+  // debounced full-text search (2+ char queries only); short queries just
+  // stop fetching — stale hits are filtered out at render by the q-length guard
   useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setRemote([]);
-    }
-  }, [open]);
-
-  // debounced full-text search
-  useEffect(() => {
-    if (fetchTimer.current) clearTimeout(fetchTimer.current);
-    if (query.trim().length < 2) {
-      setRemote([]);
-      return;
-    }
-    fetchTimer.current = setTimeout(async () => {
+    if (query.trim().length < 2) return;
+    const timer = setTimeout(async () => {
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
         if (!res.ok) return;
@@ -88,6 +89,7 @@ export function SearchPalette({
         // network hiccup — local results still work
       }
     }, 250);
+    return () => clearTimeout(timer);
   }, [query]);
 
   const q = query.trim().toLowerCase();
@@ -102,12 +104,14 @@ export function SearchPalette({
       .slice(0, 8);
   }, [items, q]);
 
-  // full-text hits not already shown in the jump list
+  // full-text hits not already shown in the jump list (ignored for short
+  // queries, so results from a previous longer query never linger)
   const shownIds = new Set(filtered.map((i) => i.id));
-  const remoteExtra = remote.filter((r) => !shownIds.has(r.id));
+  const remoteExtra =
+    q.length >= 2 ? remote.filter((r) => !shownIds.has(r.id)) : [];
 
   const go = (href: string) => {
-    setOpen(false);
+    changeOpen(false);
     router.push(href);
   };
 
@@ -126,7 +130,7 @@ export function SearchPalette({
   return (
     <CommandDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={changeOpen}
       title="Search"
       description="Jump to a page or search the docs"
     >

@@ -1,7 +1,8 @@
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createTestDb } from "@/db/test-db";
 import type { Db } from "@/db";
-import { users } from "@/db/schema";
+import { conversations, users } from "@/db/schema";
 import {
   addMessage,
   conversationForRequest,
@@ -13,6 +14,7 @@ import {
   listAllConversations,
   listUserConversations,
   loadConversationHistory,
+  purgeOldConversations,
 } from "./conversations";
 
 let db: Db;
@@ -278,5 +280,57 @@ describe("admin review", () => {
     await addMessage(db, { conversationId: id, role: "user", content: "q" });
     expect(await deleteConversation(db, id)).toBe(true);
     expect(await getConversation(db, id)).toBeNull();
+  });
+});
+
+describe("purgeOldConversations", () => {
+  const now = new Date("2026-09-01T00:00:00Z");
+  const daysAgo = (n: number) =>
+    new Date(now.getTime() - n * 24 * 60 * 60 * 1000);
+
+  it("deletes conversations whose last message is older than the cutoff", async () => {
+    const stale = await createConversation(db, {
+      ...base,
+      userId: null,
+      firstQuestion: "stale",
+    });
+    const fresh = await createConversation(db, {
+      ...base,
+      userId: "u1",
+      firstQuestion: "fresh",
+    });
+    await db
+      .update(conversations)
+      .set({ lastMessageAt: daysAgo(61) })
+      .where(eq(conversations.id, stale));
+    await db
+      .update(conversations)
+      .set({ lastMessageAt: daysAgo(59) })
+      .where(eq(conversations.id, fresh));
+
+    const deleted = await purgeOldConversations(db, {
+      olderThanDays: 60,
+      now,
+    });
+
+    expect(deleted).toBe(1);
+    expect(await getConversation(db, stale)).toBeNull();
+    expect(await getConversation(db, fresh)).not.toBeNull();
+  });
+
+  it("cascades messages of purged conversations", async () => {
+    const stale = await createConversation(db, {
+      ...base,
+      userId: null,
+      firstQuestion: "stale",
+    });
+    await addMessage(db, { conversationId: stale, role: "user", content: "q" });
+    await db
+      .update(conversations)
+      .set({ lastMessageAt: daysAgo(90) })
+      .where(eq(conversations.id, stale));
+
+    await purgeOldConversations(db, { olderThanDays: 60, now });
+    expect(await getConversation(db, stale)).toBeNull();
   });
 });
