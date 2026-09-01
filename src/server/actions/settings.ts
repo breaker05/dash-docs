@@ -6,6 +6,7 @@ import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
   ASK_DISABLED_KEY,
+  ASK_EFFORT_KEY,
   ASK_MODEL_KEY,
   GA_ID_KEY,
   PDF_FOOTER_KEY,
@@ -15,7 +16,7 @@ import {
   getSettings,
   setSetting,
 } from "@/server/settings";
-import { isAskModelId } from "@/lib/ask-models";
+import { isAskEffort, isAskModelId } from "@/lib/ask-models";
 import { extractGaId } from "@/lib/analytics";
 import { eq } from "drizzle-orm";
 import { pages } from "@/db/schema";
@@ -78,6 +79,20 @@ export async function updateAskModelAction(opts: { model: string }) {
   await setSetting(db, {
     key: ASK_MODEL_KEY,
     value: opts.model,
+    userId: user.id,
+  });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function updateAskEffortAction(opts: { effort: string }) {
+  const user = await requireAdmin();
+  if (!isAskEffort(opts.effort)) {
+    throw new Error("Unknown effort level");
+  }
+  await setSetting(db, {
+    key: ASK_EFFORT_KEY,
+    value: opts.effort,
     userId: user.id,
   });
   revalidatePath("/admin/settings");

@@ -50,3 +50,26 @@ export function resolveAskModel(id: string | null | undefined): AskModel {
 export function isAskModelId(id: string): boolean {
   return ASK_MODELS.some((m) => m.id === id);
 }
+
+// How much reasoning the thinking-capable models spend per answer. Higher
+// effort means deeper reasoning (better on hard questions) at more latency and
+// cost. Ignored for models where adaptiveThinking is false (e.g. Haiku 4.5).
+// xhigh/max are omitted — overkill for docs Q&A.
+export type AskEffort = "low" | "medium" | "high";
+
+export const ASK_EFFORTS: { id: AskEffort; label: string; blurb: string }[] = [
+  { id: "low", label: "Low", blurb: "Fastest and cheapest — recommended for chat" },
+  { id: "medium", label: "Medium", blurb: "More thorough on harder questions" },
+  { id: "high", label: "High", blurb: "Deepest reasoning, slower and costlier" },
+];
+
+export const DEFAULT_ASK_EFFORT: AskEffort = "low";
+
+/** Resolve a stored setting value to an effort level, falling back to default. */
+export function resolveAskEffort(v: string | null | undefined): AskEffort {
+  return ASK_EFFORTS.find((e) => e.id === v)?.id ?? DEFAULT_ASK_EFFORT;
+}
+
+export function isAskEffort(v: string): v is AskEffort {
+  return ASK_EFFORTS.some((e) => e.id === v);
+}

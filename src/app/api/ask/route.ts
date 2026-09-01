@@ -39,7 +39,7 @@ const FILE_CHUNK_SLOTS = 8;
  * one {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
-  const { apiKey, enabled, model } = await getAskConfig(db);
+  const { apiKey, enabled, model, effort } = await getAskConfig(db);
   if (!apiKey || !enabled) {
     return Response.json({ error: "Ask is not available" }, { status: 503 });
   }
@@ -189,13 +189,13 @@ export async function POST(request: Request) {
           // Adaptive thinking spends part of the budget on reasoning, so give
           // the answer headroom; without thinking a short chat reply is plenty.
           max_tokens: model.adaptiveThinking ? 4096 : 1024,
-          // Adaptive thinking (with low effort to stay snappy) lifts answer
-          // quality on harder questions. Haiku 4.5 doesn't support it — the
-          // params would 400 — so it runs without.
+          // Adaptive thinking lifts answer quality on harder questions; the
+          // admin-configured effort tunes how much it reasons. Haiku 4.5
+          // doesn't support these params (they'd 400), so it runs without.
           ...(model.adaptiveThinking
             ? {
                 thinking: { type: "adaptive" as const },
-                output_config: { effort: "low" as const },
+                output_config: { effort },
               }
             : {}),
           system: buildAskPrompt(sources),

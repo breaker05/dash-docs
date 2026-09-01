@@ -6,9 +6,10 @@ import { toast } from "sonner";
 import {
   setAskEnabledAction,
   updateAnthropicKeyAction,
+  updateAskEffortAction,
   updateAskModelAction,
 } from "@/server/actions/settings";
-import { ASK_MODELS } from "@/lib/ask-models";
+import { ASK_EFFORTS, ASK_MODELS } from "@/lib/ask-models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,32 +49,38 @@ function EnableToggle({
   );
 }
 
-function ModelSelect({
-  model,
+function ChoiceSelect({
+  id,
+  label,
+  value,
+  options,
   pending,
   onChange,
 }: {
-  model: string;
+  id: string;
+  label: string;
+  value: string;
+  options: readonly { id: string; label: string; blurb: string }[];
   pending: boolean;
   onChange: (next: string) => void;
 }) {
   return (
     <div className="mt-4 space-y-1.5">
-      <Label htmlFor="ask-model">Model</Label>
+      <Label htmlFor={id}>{label}</Label>
       <Select
-        value={model}
+        value={value}
         disabled={pending}
         onValueChange={(next) => {
-          if (typeof next === "string" && next !== model) onChange(next);
+          if (typeof next === "string" && next !== value) onChange(next);
         }}
       >
-        <SelectTrigger id="ask-model" className="h-8 w-full">
+        <SelectTrigger id={id} className="h-8 w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {ASK_MODELS.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {m.label} — {m.blurb}
+          {options.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.label} — {o.blurb}
             </SelectItem>
           ))}
         </SelectContent>
@@ -87,17 +94,24 @@ export function AiSettingsForm({
   source,
   enabled,
   model: initialModel,
+  effort: initialEffort,
 }: {
   configured: boolean;
   /** where the active key comes from */
   source: "env" | "settings" | null;
   enabled: boolean;
   model: string;
+  effort: string;
 }) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(!configured);
   const [model, setModel] = useState(initialModel);
+  const [effort, setEffort] = useState(initialEffort);
   const [pending, startTransition] = useTransition();
+
+  // effort only affects models that support adaptive thinking
+  const thinkingCapable =
+    ASK_MODELS.find((m) => m.id === model)?.adaptiveThinking ?? false;
 
   const toggle = (next: boolean) =>
     startTransition(async () => {
@@ -123,6 +137,43 @@ export function AiSettingsForm({
       }
     });
 
+  const changeEffort = (next: string) =>
+    startTransition(async () => {
+      const prev = effort;
+      setEffort(next); // optimistic
+      try {
+        await updateAskEffortAction({ effort: next });
+        const label = ASK_EFFORTS.find((e) => e.id === next)?.label ?? next;
+        toast.success(`Reasoning effort set to ${label}`);
+      } catch (err) {
+        setEffort(prev);
+        toast.error(err instanceof Error ? err.message : "Update failed");
+      }
+    });
+
+  const selects = (
+    <>
+      <ChoiceSelect
+        id="ask-model"
+        label="Model"
+        value={model}
+        options={ASK_MODELS}
+        pending={pending}
+        onChange={changeModel}
+      />
+      {thinkingCapable && (
+        <ChoiceSelect
+          id="ask-effort"
+          label="Reasoning effort"
+          value={effort}
+          options={ASK_EFFORTS}
+          pending={pending}
+          onChange={changeEffort}
+        />
+      )}
+    </>
+  );
+
   if (source === "env") {
     return (
       <div>
@@ -135,7 +186,7 @@ export function AiSettingsForm({
           environment variable, which takes precedence — manage the key in
           your deployment settings.
         </p>
-        <ModelSelect model={model} pending={pending} onChange={changeModel} />
+        {selects}
         <EnableToggle enabled={enabled} pending={pending} onToggle={toggle} />
       </div>
     );
@@ -182,7 +233,7 @@ export function AiSettingsForm({
             </Button>
           </div>
         </div>
-        <ModelSelect model={model} pending={pending} onChange={changeModel} />
+        {selects}
         <EnableToggle enabled={enabled} pending={pending} onToggle={toggle} />
       </div>
     );
