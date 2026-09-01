@@ -16,6 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import {
   ExternalLink,
   Lightbulb,
+  MessagesSquare,
   Paperclip,
   Settings,
   Tags,
@@ -157,6 +158,12 @@ export default async function AdminLayout({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <Paperclip className="size-4" /> AI context
+              </Link>
+              <Link
+                href="/admin/chats"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <MessagesSquare className="size-4" /> Chats
               </Link>
               <Link
                 href="/admin/settings"

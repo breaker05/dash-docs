@@ -108,7 +108,7 @@ export default async function PublicLayout({
         </aside>
         <main className="min-w-0 flex-1 py-10">{children}</main>
       </div>
-      {ask.enabled && <AskDocs />}
+      {ask.enabled && <AskDocs isSignedIn={Boolean(session?.user)} />}
       <Toaster />
       <footer className="border-t">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-sm text-muted-foreground lg:px-8">

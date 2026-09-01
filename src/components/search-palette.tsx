@@ -6,6 +6,7 @@ import {
   FileText,
   Home,
   Lightbulb,
+  MessagesSquare,
   Paperclip,
   Search,
   Settings,
@@ -116,6 +117,7 @@ export function SearchPalette({
           { title: "Feature tags", href: "/admin/tags", icon: Tags },
           { title: "Insights", href: "/admin/insights", icon: Lightbulb },
           { title: "AI context", href: "/admin/context", icon: Paperclip },
+          { title: "Chats", href: "/admin/chats", icon: MessagesSquare },
           { title: "Team", href: "/admin/users", icon: Users },
           { title: "Settings", href: "/admin/settings", icon: Settings },
         ].filter((l) => q === "" || l.title.toLowerCase().includes(q))

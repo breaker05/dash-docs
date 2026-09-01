@@ -1,8 +1,10 @@
 import {
+  bigserial,
   boolean,
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -332,7 +334,57 @@ export const assets = pgTable("asset", {
     .defaultNow(),
 });
 
+// Ask AI conversations. Every chat (anonymous or signed-in) is persisted for
+// admin review; signed-in members can also revisit their own. userId is null
+// for anonymous visitors and set-null on member deletion so history survives.
+export const conversations = pgTable("conversation", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: text("user_id").references(() => users.id, { onDelete: "set null" }),
+  // truncated first question; a human-readable label for the list views
+  title: text("title"),
+  // snapshot of the settings the chat ran under (handy when reviewing)
+  model: text("model").notNull(),
+  effort: text("effort").notNull(),
+  // whether internal pages were in retrieval scope (i.e. asked while signed in)
+  includeInternal: boolean("include_internal").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const messages = pgTable(
+  "message",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    // monotonic insertion order — timestamps within a turn can collide
+    seq: bigserial("seq", { mode: "number" }).notNull(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["user", "assistant"] }).notNull(),
+    content: text("content").notNull(),
+    // cited sources for assistant turns: [{ n, title, path, kind }]
+    sources: jsonb("sources").$type<MessageSource[]>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("message_conversation_idx").on(t.conversationId, t.seq)],
+);
+
+export type MessageSource = {
+  n: number;
+  title: string;
+  path: string;
+  kind: "page" | "file";
+};
+
 export type Page = typeof pages.$inferSelect;
 export type PageRevision = typeof pageRevisions.$inferSelect;
 export type Tag = typeof tags.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type Conversation = typeof conversations.$inferSelect;
+export type Message = typeof messages.$inferSelect;

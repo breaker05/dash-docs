@@ -12,6 +12,12 @@ import { getEmbeddingProvider } from "@/server/embeddings";
 import { reciprocalRankFusion } from "@/lib/rrf";
 import { getAskConfig } from "@/server/settings";
 import {
+  addMessage,
+  conversationForRequest,
+  createConversation,
+  loadConversationHistory,
+} from "@/server/conversations";
+import {
   buildAskPrompt,
   buildOrQuery,
   trimHistory,
@@ -45,6 +51,7 @@ export async function POST(request: Request) {
   }
 
   const session = await auth();
+  const userId = session?.user?.id ?? null;
   const limit = await checkRateLimit(db, {
     key: `ask:ip:${requestIp(request)}`,
     limit: session?.user ? 30 : 10,
@@ -54,7 +61,7 @@ export async function POST(request: Request) {
 
   let body: {
     question?: string;
-    history?: { role: "user" | "assistant"; content: string }[];
+    conversationId?: string;
   };
   try {
     body = await request.json();
@@ -65,6 +72,20 @@ export async function POST(request: Request) {
   if (question === "") {
     return Response.json({ error: "question is required" }, { status: 400 });
   }
+
+  // Resolve the conversation: continue the one the client holds if it's the
+  // caller's (or an anonymous one they created), otherwise start fresh. History
+  // now lives server-side — the client no longer resends the transcript, which
+  // is what keeps context (and cost) bounded across a session.
+  const existing = body.conversationId
+    ? await conversationForRequest(db, {
+        conversationId: body.conversationId,
+        userId,
+      })
+    : null;
+  const priorHistory = existing
+    ? await loadConversationHistory(db, existing.id)
+    : [];
 
   // retrieval: precise (AND) search first; when conversational phrasing
   // leaves it thin, fill from a recall-mode (OR) search — ranking puts
@@ -181,8 +202,42 @@ export async function POST(request: Request) {
   const send = (controller: ReadableStreamDefaultController, data: unknown) =>
     controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 
+  const sourceRefs = sources.map((s) => ({
+    n: s.n,
+    title: s.title,
+    path: s.path,
+    kind: s.kind,
+  }));
+
   const stream = new ReadableStream({
     async start(controller) {
+      // Ensure a conversation exists and record the user's question up front,
+      // so the exchange is captured even if the model stream fails midway.
+      let conversationId: string;
+      try {
+        conversationId =
+          existing?.id ??
+          (await createConversation(db, {
+            userId,
+            model: model.id,
+            effort,
+            includeInternal,
+            firstQuestion: question,
+          }));
+        await addMessage(db, {
+          conversationId,
+          role: "user",
+          content: question,
+        });
+      } catch {
+        send(controller, { type: "error", message: "Something went wrong." });
+        controller.close();
+        return;
+      }
+      // Tell the client which conversation this is (drives history + follow-ups).
+      send(controller, { type: "meta", conversationId });
+
+      let answer = "";
       try {
         const messageStream = client.messages.stream({
           model: model.id,
@@ -200,7 +255,7 @@ export async function POST(request: Request) {
             : {}),
           system: buildAskPrompt(sources),
           messages: [
-            ...trimHistory(body.history ?? []),
+            ...trimHistory(priorHistory),
             { role: "user", content: question },
           ],
         });
@@ -209,18 +264,11 @@ export async function POST(request: Request) {
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
+            answer += event.delta.text;
             send(controller, { type: "delta", text: event.delta.text });
           }
         }
-        send(controller, {
-          type: "sources",
-          sources: sources.map((s) => ({
-            n: s.n,
-            title: s.title,
-            path: s.path,
-            kind: s.kind,
-          })),
-        });
+        send(controller, { type: "sources", sources: sourceRefs });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e) {
         send(controller, {
@@ -231,6 +279,16 @@ export async function POST(request: Request) {
               : "Something went wrong.",
         });
       } finally {
+        // Persist whatever answer we produced (with its sources) so the
+        // transcript is complete for history and admin review.
+        if (answer.trim() !== "") {
+          await addMessage(db, {
+            conversationId,
+            role: "assistant",
+            content: answer,
+            sources: sourceRefs,
+          }).catch(() => {});
+        }
         controller.close();
       }
     },
