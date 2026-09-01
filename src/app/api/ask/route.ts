@@ -26,7 +26,7 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "claude-sonnet-5";
 
 // Retrieval budget per answer. File chunks get their own reserved slots so a
 // large reference file (e.g. an API spec split into many chunks) is never
