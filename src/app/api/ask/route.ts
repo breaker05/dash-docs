@@ -26,8 +26,6 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MODEL = "claude-sonnet-5";
-
 // Retrieval budget per answer. File chunks get their own reserved slots so a
 // large reference file (e.g. an API spec split into many chunks) is never
 // squeezed out by page hits; pages likewise keep a floor.
@@ -41,7 +39,7 @@ const FILE_CHUNK_SLOTS = 8;
  * one {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
-  const { apiKey, enabled } = await getAskConfig(db);
+  const { apiKey, enabled, model } = await getAskConfig(db);
   if (!apiKey || !enabled) {
     return Response.json({ error: "Ask is not available" }, { status: 503 });
   }
@@ -187,8 +185,19 @@ export async function POST(request: Request) {
     async start(controller) {
       try {
         const messageStream = client.messages.stream({
-          model: MODEL,
-          max_tokens: 1024,
+          model: model.id,
+          // Adaptive thinking spends part of the budget on reasoning, so give
+          // the answer headroom; without thinking a short chat reply is plenty.
+          max_tokens: model.adaptiveThinking ? 4096 : 1024,
+          // Adaptive thinking (with low effort to stay snappy) lifts answer
+          // quality on harder questions. Haiku 4.5 doesn't support it — the
+          // params would 400 — so it runs without.
+          ...(model.adaptiveThinking
+            ? {
+                thinking: { type: "adaptive" as const },
+                output_config: { effort: "low" as const },
+              }
+            : {}),
           system: buildAskPrompt(sources),
           messages: [
             ...trimHistory(body.history ?? []),

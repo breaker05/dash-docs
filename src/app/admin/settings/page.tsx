@@ -4,6 +4,7 @@ import { requireUser } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
   ASK_DISABLED_KEY,
+  ASK_MODEL_KEY,
   GA_ID_KEY,
   getSettings,
   PDF_FOOTER_KEY,
@@ -11,6 +12,7 @@ import {
   PDF_LOGO_KEY,
   SLACK_WEBHOOK_KEY,
 } from "@/server/settings";
+import { resolveAskModel } from "@/lib/ask-models";
 import { AiSettingsForm } from "@/components/admin/ai-settings-form";
 import { SlackSettingsForm } from "@/components/admin/slack-settings-form";
 import { listApiKeys } from "@/server/api-keys";
@@ -32,6 +34,7 @@ export default async function SettingsPage() {
     SLACK_WEBHOOK_KEY,
     ANTHROPIC_KEY_SETTING,
     ASK_DISABLED_KEY,
+    ASK_MODEL_KEY,
   ]);
   const aiSource = process.env.ANTHROPIC_API_KEY
     ? ("env" as const)
@@ -87,6 +90,7 @@ export default async function SettingsPage() {
         configured={aiSource !== null}
         source={aiSource}
         enabled={aiSource !== null && !values[ASK_DISABLED_KEY]}
+        model={resolveAskModel(values[ASK_MODEL_KEY]).id}
       />
 
       <Separator className="my-8" />

@@ -6,10 +6,19 @@ import { toast } from "sonner";
 import {
   setAskEnabledAction,
   updateAnthropicKeyAction,
+  updateAskModelAction,
 } from "@/server/actions/settings";
+import { ASK_MODELS } from "@/lib/ask-models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function EnableToggle({
   enabled,
@@ -39,18 +48,55 @@ function EnableToggle({
   );
 }
 
+function ModelSelect({
+  model,
+  pending,
+  onChange,
+}: {
+  model: string;
+  pending: boolean;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <div className="mt-4 space-y-1.5">
+      <Label htmlFor="ask-model">Model</Label>
+      <Select
+        value={model}
+        disabled={pending}
+        onValueChange={(next) => {
+          if (typeof next === "string" && next !== model) onChange(next);
+        }}
+      >
+        <SelectTrigger id="ask-model" className="h-8 w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ASK_MODELS.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.label} — {m.blurb}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function AiSettingsForm({
   configured,
   source,
   enabled,
+  model: initialModel,
 }: {
   configured: boolean;
   /** where the active key comes from */
   source: "env" | "settings" | null;
   enabled: boolean;
+  model: string;
 }) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(!configured);
+  const [model, setModel] = useState(initialModel);
   const [pending, startTransition] = useTransition();
 
   const toggle = (next: boolean) =>
@@ -59,6 +105,20 @@ export function AiSettingsForm({
         await setAskEnabledAction({ enabled: next });
         toast.success(next ? "Ask AI enabled" : "Ask AI paused — key kept");
       } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Update failed");
+      }
+    });
+
+  const changeModel = (next: string) =>
+    startTransition(async () => {
+      const prev = model;
+      setModel(next); // optimistic
+      try {
+        await updateAskModelAction({ model: next });
+        const label = ASK_MODELS.find((m) => m.id === next)?.label ?? next;
+        toast.success(`Model set to ${label}`);
+      } catch (err) {
+        setModel(prev);
         toast.error(err instanceof Error ? err.message : "Update failed");
       }
     });
@@ -75,6 +135,7 @@ export function AiSettingsForm({
           environment variable, which takes precedence — manage the key in
           your deployment settings.
         </p>
+        <ModelSelect model={model} pending={pending} onChange={changeModel} />
         <EnableToggle enabled={enabled} pending={pending} onToggle={toggle} />
       </div>
     );
@@ -121,6 +182,7 @@ export function AiSettingsForm({
             </Button>
           </div>
         </div>
+        <ModelSelect model={model} pending={pending} onChange={changeModel} />
         <EnableToggle enabled={enabled} pending={pending} onToggle={toggle} />
       </div>
     );

@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import type { Db } from "@/db";
 import { settings } from "@/db/schema";
+import { resolveAskModel, type AskModel } from "@/lib/ask-models";
 
 export const PDF_HEADER_KEY = "pdf.headerText";
 export const PDF_FOOTER_KEY = "pdf.footerText";
@@ -11,19 +12,30 @@ export const SLACK_WEBHOOK_KEY = "slack.webhookUrl";
 export const ANTHROPIC_KEY_SETTING = "ai.anthropicApiKey";
 // present (any value) → chat is temporarily switched off; the key is kept
 export const ASK_DISABLED_KEY = "ai.chatDisabled";
+// which model answers the chat; unset → the default (see resolveAskModel)
+export const ASK_MODEL_KEY = "ai.chatModel";
 
 /**
  * Ask AI configuration: the API key (environment variable wins, otherwise
- * the admin-saved setting) plus the temporary on/off switch. The chat runs
- * only when a key exists AND it hasn't been switched off.
+ * the admin-saved setting), the temporary on/off switch, and the model to
+ * answer with. The chat runs only when a key exists AND it hasn't been
+ * switched off.
  */
 export async function getAskConfig(
   db: Db,
-): Promise<{ apiKey: string | null; enabled: boolean }> {
-  const values = await getSettings(db, [ANTHROPIC_KEY_SETTING, ASK_DISABLED_KEY]);
+): Promise<{ apiKey: string | null; enabled: boolean; model: AskModel }> {
+  const values = await getSettings(db, [
+    ANTHROPIC_KEY_SETTING,
+    ASK_DISABLED_KEY,
+    ASK_MODEL_KEY,
+  ]);
   const apiKey =
     process.env.ANTHROPIC_API_KEY || values[ANTHROPIC_KEY_SETTING] || null;
-  return { apiKey, enabled: apiKey !== null && !values[ASK_DISABLED_KEY] };
+  return {
+    apiKey,
+    enabled: apiKey !== null && !values[ASK_DISABLED_KEY],
+    model: resolveAskModel(values[ASK_MODEL_KEY]),
+  };
 }
 
 export async function getSettings(

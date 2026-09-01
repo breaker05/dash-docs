@@ -6,6 +6,7 @@ import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
   ASK_DISABLED_KEY,
+  ASK_MODEL_KEY,
   GA_ID_KEY,
   PDF_FOOTER_KEY,
   PDF_HEADER_KEY,
@@ -14,6 +15,7 @@ import {
   getSettings,
   setSetting,
 } from "@/server/settings";
+import { isAskModelId } from "@/lib/ask-models";
 import { extractGaId } from "@/lib/analytics";
 import { eq } from "drizzle-orm";
 import { pages } from "@/db/schema";
@@ -62,6 +64,20 @@ export async function updateAnthropicKeyAction(opts: { value: string }) {
   await setSetting(db, {
     key: ANTHROPIC_KEY_SETTING,
     value,
+    userId: user.id,
+  });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function updateAskModelAction(opts: { model: string }) {
+  const user = await requireAdmin();
+  if (!isAskModelId(opts.model)) {
+    throw new Error("Unknown model");
+  }
+  await setSetting(db, {
+    key: ASK_MODEL_KEY,
+    value: opts.model,
     userId: user.id,
   });
   revalidatePath("/admin/settings");
