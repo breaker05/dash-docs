@@ -9,6 +9,7 @@ import {
   searchPageChunks,
   searchPageChunksByVector,
 } from "@/server/pages/chunks";
+import { getPublishedCorpus } from "@/server/pages/corpus";
 import { getEmbeddingProvider } from "@/server/embeddings";
 import { reciprocalRankFusion } from "@/lib/rrf";
 import { getAskConfig } from "@/server/settings";
@@ -21,6 +22,7 @@ import {
 import {
   buildAskPrompt,
   buildOrQuery,
+  citedSourceNumbers,
   trimHistory,
   type AskSource,
 } from "@/lib/ask-prompt";
@@ -38,6 +40,11 @@ export const maxDuration = 60;
 // squeezed out by page hits; pages likewise keep a floor.
 const PAGE_SLOTS = 4;
 const FILE_CHUNK_SLOTS = 8;
+
+// Above this many characters of published page content, stop sending the whole
+// corpus and fall back to keyword/section retrieval. ~400K chars ≈ ~100K
+// tokens — fits every supported model's context with headroom for the answer.
+const WHOLE_CORPUS_CHAR_BUDGET = 400_000;
 
 /**
  * "Ask the docs": retrieval-grounded Q&A over published pages. Signed-in
@@ -88,27 +95,36 @@ export async function POST(request: Request) {
     ? await loadConversationHistory(db, existing.id)
     : [];
 
-  // Retrieval is chunk-level over both the docs pages (the source of truth) and
-  // uploaded reference files. Precise (AND) keyword search first; when
-  // conversational phrasing leaves it thin, fall back to a recall-mode (OR)
-  // search. Chunking pages means the model gets the relevant SECTION, not a
-  // whole page truncated to its table of contents.
   const includeInternal = Boolean(session?.user);
   const orQuery = buildOrQuery(question);
 
-  let pageChunkHits = await searchPageChunks(db, {
-    query: question,
-    includeInternal,
-    limit: PAGE_SLOTS,
-  });
-  if (pageChunkHits.length === 0 && orQuery !== "") {
+  // Pages are the source of truth. When the whole published corpus fits in the
+  // budget (the common case — a docs site is small), give the model EVERY page
+  // and let it answer from all of them, cached so repeat questions are cheap.
+  // No retrieval guessing, no embeddings, no external service. Only when the
+  // corpus is too large do we fall back to keyword/section retrieval.
+  const corpus = await getPublishedCorpus(db, { includeInternal });
+  const corpusChars = corpus.reduce((n, p) => n + p.markdown.length, 0);
+  const wholeCorpus = corpus.length > 0 && corpusChars <= WHOLE_CORPUS_CHAR_BUDGET;
+
+  let pageChunkHits: Awaited<ReturnType<typeof searchPageChunks>> = [];
+  if (!wholeCorpus) {
     pageChunkHits = await searchPageChunks(db, {
-      query: orQuery,
+      query: question,
       includeInternal,
       limit: PAGE_SLOTS,
     });
+    if (pageChunkHits.length === 0 && orQuery !== "") {
+      pageChunkHits = await searchPageChunks(db, {
+        query: orQuery,
+        includeInternal,
+        limit: PAGE_SLOTS,
+      });
+    }
   }
 
+  // Uploaded reference files (API specs etc.) can be huge, so they stay
+  // chunk-level regardless of corpus mode.
   let fileChunkHits = await searchContextChunks(db, {
     query: question,
     includeInternal,
@@ -122,51 +138,54 @@ export async function POST(request: Request) {
     });
   }
 
-  // Semantic pass (additive): embed the question once and blend vector-similarity
-  // hits into both page and file results via reciprocal rank fusion, so
-  // conceptually-matching sections surface even when they share no keywords with
-  // the question (e.g. a "webhooks" question when the docs say "event
-  // notifications"). Best-effort: if the embedding API or the pgvector query
-  // fails, keep the keyword hits rather than failing the whole answer.
+  // Optional semantic pass — only if an embedding provider is configured (it
+  // isn't by default). Best-effort: a failure degrades to keyword hits.
   const embedder = getEmbeddingProvider();
   if (embedder) {
     try {
       const [queryVec] = await embedder.embed([question]);
       if (queryVec) {
-        const [pageVec, fileVec] = await Promise.all([
-          searchPageChunksByVector(db, {
-            embedding: queryVec,
-            includeInternal,
-            limit: PAGE_SLOTS,
-          }),
-          searchContextChunksByVector(db, {
-            embedding: queryVec,
-            includeInternal,
-            limit: FILE_CHUNK_SLOTS,
-          }),
-        ]);
-        pageChunkHits = reciprocalRankFusion(
-          [pageChunkHits, pageVec],
-          (c) => `${c.pageId}:${c.ord}`,
-        ).slice(0, PAGE_SLOTS);
+        const fileVec = await searchContextChunksByVector(db, {
+          embedding: queryVec,
+          includeInternal,
+          limit: FILE_CHUNK_SLOTS,
+        });
         fileChunkHits = reciprocalRankFusion(
           [fileChunkHits, fileVec],
           (c) => `${c.docId}:${c.ord}`,
         ).slice(0, FILE_CHUNK_SLOTS);
+        if (!wholeCorpus) {
+          const pageVec = await searchPageChunksByVector(db, {
+            embedding: queryVec,
+            includeInternal,
+            limit: PAGE_SLOTS,
+          });
+          pageChunkHits = reciprocalRankFusion(
+            [pageChunkHits, pageVec],
+            (c) => `${c.pageId}:${c.ord}`,
+          ).slice(0, PAGE_SLOTS);
+        }
       }
     } catch (err) {
       console.error("Ask AI semantic retrieval failed; keyword-only", err);
     }
   }
-  // Reserve slots for each source kind so a large reference file (many matching
-  // chunks) is never crowded out by page hits, and vice versa.
-  const pageSources: AskSource[] = pageChunkHits.slice(0, PAGE_SLOTS).map((c) => ({
-    n: 0,
-    title: c.title,
-    path: c.path,
-    markdown: c.content,
-    kind: "page" as const,
-  }));
+
+  const pageSources: AskSource[] = wholeCorpus
+    ? corpus.map((p) => ({
+        n: 0,
+        title: p.title,
+        path: p.path,
+        markdown: p.markdown,
+        kind: "page" as const,
+      }))
+    : pageChunkHits.slice(0, PAGE_SLOTS).map((c) => ({
+        n: 0,
+        title: c.title,
+        path: c.path,
+        markdown: c.content,
+        kind: "page" as const,
+      }));
   const fileSources: AskSource[] = fileChunkHits.slice(0, FILE_CHUNK_SLOTS).map((c) => ({
     n: 0,
     title: `${c.docName} (part ${c.ord + 1})`,
@@ -178,6 +197,21 @@ export async function POST(request: Request) {
     ...s,
     n: i + 1,
   }));
+
+  // In whole-corpus mode, keep full page text and cache the (stable) prompt so
+  // repeat questions only pay a fraction to re-read it.
+  const systemPrompt = buildAskPrompt(sources, {
+    maxSourceChars: wholeCorpus ? Infinity : undefined,
+  });
+  const system = wholeCorpus
+    ? [
+        {
+          type: "text" as const,
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" as const, ttl: "1h" as const },
+        },
+      ]
+    : systemPrompt;
 
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
@@ -235,7 +269,7 @@ export async function POST(request: Request) {
                 output_config: { effort },
               }
             : {}),
-          system: buildAskPrompt(sources),
+          system,
           messages: [
             ...trimHistory(priorHistory),
             { role: "user", content: question },
@@ -250,7 +284,11 @@ export async function POST(request: Request) {
             send(controller, { type: "delta", text: event.delta.text });
           }
         }
-        send(controller, { type: "sources", sources: sourceRefs });
+        // Show only the sources the model actually cited — in whole-corpus mode
+        // every page is supplied, so surfacing them all would be noise.
+        const cited = citedSourceNumbers(answer);
+        const citedSources = sourceRefs.filter((s) => cited.has(s.n));
+        send(controller, { type: "sources", sources: citedSources });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e) {
         send(controller, {
@@ -261,14 +299,15 @@ export async function POST(request: Request) {
               : "Something went wrong.",
         });
       } finally {
-        // Persist whatever answer we produced (with its sources) so the
-        // transcript is complete for history and admin review.
+        // Persist whatever answer we produced (with the sources it cited) so
+        // the transcript is complete for history and admin review.
         if (answer.trim() !== "") {
+          const cited = citedSourceNumbers(answer);
           await addMessage(db, {
             conversationId,
             role: "assistant",
             content: answer,
-            sources: sourceRefs,
+            sources: sourceRefs.filter((s) => cited.has(s.n)),
           }).catch(() => {});
         }
         controller.close();

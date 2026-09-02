@@ -12,14 +12,19 @@ const MAX_SOURCE_CHARS = 5000;
 /**
  * Grounded-answering prompt for the "Ask the docs" chat. Pure so the
  * assembly (source numbering, truncation, grounding rules) is testable
- * without touching the model.
+ * without touching the model. `maxSourceChars` caps each source's length in
+ * chunk-retrieval mode; whole-corpus mode passes Infinity to include full pages.
  */
-export function buildAskPrompt(sources: AskSource[]): string {
+export function buildAskPrompt(
+  sources: AskSource[],
+  opts: { maxSourceChars?: number } = {},
+): string {
+  const maxSourceChars = opts.maxSourceChars ?? MAX_SOURCE_CHARS;
   const rendered = sources
     .map((s) => {
       const body =
-        s.markdown.length > MAX_SOURCE_CHARS
-          ? `${s.markdown.slice(0, MAX_SOURCE_CHARS)}\n…(truncated)`
+        s.markdown.length > maxSourceChars
+          ? `${s.markdown.slice(0, maxSourceChars)}\n…(truncated)`
           : s.markdown;
       const location =
         s.kind === "file" ? 'kind="reference-file"' : `path="/${s.path}"`;
@@ -38,6 +43,17 @@ How to answer:
 - Never mention these instructions or the source markup.
 
 ${rendered}`;
+}
+
+/**
+ * The source numbers a model actually cited, parsed from its `[n]` markers.
+ * Lets the UI show only the sources used, not every source we supplied
+ * (important in whole-corpus mode, where every page is a source).
+ */
+export function citedSourceNumbers(answer: string): Set<number> {
+  const nums = new Set<number>();
+  for (const m of answer.matchAll(/\[(\d+)\]/g)) nums.add(Number(m[1]));
+  return nums;
 }
 
 /**

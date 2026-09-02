@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildAskPrompt, buildOrQuery, trimHistory } from "./ask-prompt";
+import {
+  buildAskPrompt,
+  buildOrQuery,
+  citedSourceNumbers,
+  trimHistory,
+} from "./ask-prompt";
 
 describe("buildOrQuery", () => {
   it("ORs significant words for recall-mode retrieval", () => {
@@ -30,6 +35,27 @@ describe("buildAskPrompt", () => {
     expect(prompt).toContain(
       '<source n="3" title="swagger.json (part 2)" kind="reference-file">',
     );
+  });
+
+  it("does not truncate when maxSourceChars is Infinity (whole-corpus mode)", () => {
+    const big = "y".repeat(9000);
+    const prompt = buildAskPrompt(
+      [{ n: 1, title: "Big", path: "big", markdown: big, kind: "page" }],
+      { maxSourceChars: Infinity },
+    );
+    expect(prompt).toContain(big);
+    expect(prompt).not.toContain("…(truncated)");
+  });
+});
+
+describe("citedSourceNumbers", () => {
+  it("extracts the [n] markers the model actually cited", () => {
+    const answer = "Use the endpoint [1]. Also see rate limits [3] and [3] again.";
+    expect([...citedSourceNumbers(answer)].sort()).toEqual([1, 3]);
+  });
+
+  it("returns an empty set when nothing is cited", () => {
+    expect(citedSourceNumbers("I don't have that information.").size).toBe(0);
   });
 });
 
