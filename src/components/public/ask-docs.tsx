@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   CornerDownLeft,
@@ -44,6 +44,51 @@ const SUGGESTIONS = [
   "What fields does the customer import accept?",
   "How is rate limiting handled?",
 ];
+
+// Shown while waiting for the first token. Gentle dots immediately; after a few
+// seconds a reassurance line fades in and rotates, so a slow answer (big corpus
+// + thinking) never looks like a hang.
+const REASSURANCE = [
+  "Still here — reading through the docs…",
+  "Noodling on it…",
+  "Cross-referencing the pages…",
+  "Almost there…",
+];
+
+function ThinkingIndicator() {
+  const [secs, setSecs] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSecs((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const message =
+    secs >= 4
+      ? REASSURANCE[Math.min(Math.floor((secs - 4) / 5), REASSURANCE.length - 1)]
+      : null;
+
+  return (
+    <div className="flex items-center gap-2.5 text-muted-foreground">
+      <span className="flex items-center gap-1" aria-hidden>
+        {[0, 200, 400].map((delay) => (
+          <span
+            key={delay}
+            className="size-1.5 animate-pulse rounded-full bg-current"
+            style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+          />
+        ))}
+      </span>
+      {message && (
+        <span
+          key={message}
+          className="text-xs italic text-muted-foreground/80 duration-500 animate-in fade-in-0"
+        >
+          {message}
+        </span>
+      )}
+      <span className="sr-only">Generating a response…</span>
+    </div>
+  );
+}
 
 export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
   const [open, setOpen] = useState(false);
@@ -292,7 +337,7 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
                   turn.content ? (
                     <AnswerMarkdown text={turn.content} />
                   ) : busy && i === turns.length - 1 ? (
-                    "…"
+                    <ThinkingIndicator />
                   ) : null
                 ) : (
                   turn.content
