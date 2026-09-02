@@ -14,6 +14,8 @@ export type AskModel = {
    * to it returns a 400), so the route omits them for it.
    */
   adaptiveThinking: boolean;
+  /** context window in tokens — caps how much of the corpus can be sent. */
+  contextTokens: number;
 };
 
 export const ASK_MODELS: AskModel[] = [
@@ -22,18 +24,21 @@ export const ASK_MODELS: AskModel[] = [
     label: "Sonnet 5",
     blurb: "Balanced quality and cost — recommended",
     adaptiveThinking: true,
+    contextTokens: 1_000_000,
   },
   {
     id: "claude-opus-5",
     label: "Opus 5",
     blurb: "Highest quality, highest cost",
     adaptiveThinking: true,
+    contextTokens: 1_000_000,
   },
   {
     id: "claude-haiku-4-5",
     label: "Haiku 4.5",
     blurb: "Fastest and cheapest",
     adaptiveThinking: false,
+    contextTokens: 200_000,
   },
 ];
 
@@ -72,4 +77,70 @@ export function resolveAskEffort(v: string | null | undefined): AskEffort {
 
 export function isAskEffort(v: string): v is AskEffort {
   return ASK_EFFORTS.some((e) => e.id === v);
+}
+
+// Whole-corpus retrieval: how much published-page content (in tokens) to send
+// the model in full before falling back to keyword/section retrieval. The
+// admin picks a target; the route caps it to what the selected model can hold.
+// "0" = never send the whole site (always retrieve sections).
+export const ASK_CORPUS_BUDGETS: { id: string; label: string; blurb: string }[] =
+  [
+    {
+      id: "0",
+      label: "Sections only",
+      blurb: "Never send the whole site — always retrieve sections",
+    },
+    {
+      id: "100000",
+      label: "100K tokens",
+      blurb: "Send the whole site when it fits ~100K tokens",
+    },
+    {
+      id: "200000",
+      label: "200K tokens",
+      blurb: "Recommended — fits most sites, including internal docs",
+    },
+    {
+      id: "400000",
+      label: "400K tokens",
+      blurb: "Larger sites — needs a 1M-context model (Sonnet/Opus)",
+    },
+    {
+      id: "1000000",
+      label: "Max for the model",
+      blurb: "As much as the selected model's context can hold",
+    },
+  ];
+
+export const DEFAULT_CORPUS_TOKEN_BUDGET = 200_000;
+
+// Reserve for the prompt instructions, chat history, and the answer itself, so
+// the corpus never fills the whole context window.
+const CORPUS_HEADROOM_TOKENS = 32_000;
+const CHARS_PER_TOKEN = 4;
+
+/** Resolve a stored setting value to a token budget, falling back to default. */
+export function resolveCorpusTokenBudget(v: string | null | undefined): number {
+  if (typeof v !== "string" || v.trim() === "") {
+    return DEFAULT_CORPUS_TOKEN_BUDGET;
+  }
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_CORPUS_TOKEN_BUDGET;
+}
+
+export function isCorpusBudget(v: string): boolean {
+  return ASK_CORPUS_BUDGETS.some((b) => b.id === v);
+}
+
+/**
+ * The whole-corpus budget in CHARACTERS for a given model + configured token
+ * budget, capped so the corpus leaves headroom in the model's context window.
+ * The route compares the corpus's character length against this.
+ */
+export function effectiveCorpusCharBudget(
+  model: AskModel,
+  configuredTokens: number,
+): number {
+  const safeTokens = Math.max(model.contextTokens - CORPUS_HEADROOM_TOKENS, 0);
+  return Math.min(configuredTokens, safeTokens) * CHARS_PER_TOKEN;
 }

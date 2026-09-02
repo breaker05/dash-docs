@@ -5,6 +5,7 @@ import { settings } from "@/db/schema";
 import {
   resolveAskModel,
   resolveAskEffort,
+  resolveCorpusTokenBudget,
   type AskModel,
   type AskEffort,
 } from "@/lib/ask-models";
@@ -21,24 +22,29 @@ export const ASK_DISABLED_KEY = "ai.chatDisabled";
 export const ASK_MODEL_KEY = "ai.chatModel";
 // reasoning effort for thinking-capable models; unset → the default
 export const ASK_EFFORT_KEY = "ai.chatEffort";
+// whole-corpus token budget (how much of the docs to send in full); unset → default
+export const ASK_CORPUS_BUDGET_KEY = "ai.corpusBudget";
 
 /**
  * Ask AI configuration: the API key (environment variable wins, otherwise
  * the admin-saved setting), the temporary on/off switch, the model to answer
- * with, and the reasoning effort for thinking-capable models. The chat runs
- * only when a key exists AND it hasn't been switched off.
+ * with, the reasoning effort for thinking-capable models, and the whole-corpus
+ * token budget. The chat runs only when a key exists AND it hasn't been
+ * switched off.
  */
 export async function getAskConfig(db: Db): Promise<{
   apiKey: string | null;
   enabled: boolean;
   model: AskModel;
   effort: AskEffort;
+  corpusTokenBudget: number;
 }> {
   const values = await getSettings(db, [
     ANTHROPIC_KEY_SETTING,
     ASK_DISABLED_KEY,
     ASK_MODEL_KEY,
     ASK_EFFORT_KEY,
+    ASK_CORPUS_BUDGET_KEY,
   ]);
   const apiKey =
     process.env.ANTHROPIC_API_KEY || values[ANTHROPIC_KEY_SETTING] || null;
@@ -47,6 +53,7 @@ export async function getAskConfig(db: Db): Promise<{
     enabled: apiKey !== null && !values[ASK_DISABLED_KEY],
     model: resolveAskModel(values[ASK_MODEL_KEY]),
     effort: resolveAskEffort(values[ASK_EFFORT_KEY]),
+    corpusTokenBudget: resolveCorpusTokenBudget(values[ASK_CORPUS_BUDGET_KEY]),
   };
 }
 

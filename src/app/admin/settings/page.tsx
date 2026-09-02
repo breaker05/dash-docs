@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
+  ASK_CORPUS_BUDGET_KEY,
   ASK_DISABLED_KEY,
   ASK_EFFORT_KEY,
   ASK_MODEL_KEY,
@@ -13,7 +14,12 @@ import {
   PDF_LOGO_KEY,
   SLACK_WEBHOOK_KEY,
 } from "@/server/settings";
-import { resolveAskEffort, resolveAskModel } from "@/lib/ask-models";
+import {
+  DEFAULT_CORPUS_TOKEN_BUDGET,
+  isCorpusBudget,
+  resolveAskEffort,
+  resolveAskModel,
+} from "@/lib/ask-models";
 import { AiSettingsForm } from "@/components/admin/ai-settings-form";
 import { SlackSettingsForm } from "@/components/admin/slack-settings-form";
 import { listApiKeys } from "@/server/api-keys";
@@ -37,6 +43,7 @@ export default async function SettingsPage() {
     ASK_DISABLED_KEY,
     ASK_MODEL_KEY,
     ASK_EFFORT_KEY,
+    ASK_CORPUS_BUDGET_KEY,
   ]);
   const aiSource = process.env.ANTHROPIC_API_KEY
     ? ("env" as const)
@@ -94,6 +101,11 @@ export default async function SettingsPage() {
         enabled={aiSource !== null && !values[ASK_DISABLED_KEY]}
         model={resolveAskModel(values[ASK_MODEL_KEY]).id}
         effort={resolveAskEffort(values[ASK_EFFORT_KEY])}
+        corpusBudget={
+          isCorpusBudget(values[ASK_CORPUS_BUDGET_KEY] ?? "")
+            ? values[ASK_CORPUS_BUDGET_KEY]
+            : String(DEFAULT_CORPUS_TOKEN_BUDGET)
+        }
       />
 
       <Separator className="my-8" />

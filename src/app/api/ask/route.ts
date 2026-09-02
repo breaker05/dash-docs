@@ -26,6 +26,7 @@ import {
   trimHistory,
   type AskSource,
 } from "@/lib/ask-prompt";
+import { effectiveCorpusCharBudget } from "@/lib/ask-models";
 import {
   checkRateLimit,
   rateLimitedResponse,
@@ -41,11 +42,6 @@ export const maxDuration = 60;
 const PAGE_SLOTS = 4;
 const FILE_CHUNK_SLOTS = 8;
 
-// Above this many characters of published page content, stop sending the whole
-// corpus and fall back to keyword/section retrieval. ~400K chars ≈ ~100K
-// tokens — fits every supported model's context with headroom for the answer.
-const WHOLE_CORPUS_CHAR_BUDGET = 400_000;
-
 /**
  * "Ask the docs": retrieval-grounded Q&A over published pages. Signed-in
  * team members transparently get internal pages in retrieval; anonymous
@@ -53,7 +49,8 @@ const WHOLE_CORPUS_CHAR_BUDGET = 400_000;
  * one {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
-  const { apiKey, enabled, model, effort } = await getAskConfig(db);
+  const { apiKey, enabled, model, effort, corpusTokenBudget } =
+    await getAskConfig(db);
   if (!apiKey || !enabled) {
     return Response.json({ error: "Ask is not available" }, { status: 503 });
   }
@@ -105,7 +102,8 @@ export async function POST(request: Request) {
   // corpus is too large do we fall back to keyword/section retrieval.
   const corpus = await getPublishedCorpus(db, { includeInternal });
   const corpusChars = corpus.reduce((n, p) => n + p.markdown.length, 0);
-  const wholeCorpus = corpus.length > 0 && corpusChars <= WHOLE_CORPUS_CHAR_BUDGET;
+  const corpusBudget = effectiveCorpusCharBudget(model, corpusTokenBudget);
+  const wholeCorpus = corpus.length > 0 && corpusChars <= corpusBudget;
 
   let pageChunkHits: Awaited<ReturnType<typeof searchPageChunks>> = [];
   if (!wholeCorpus) {

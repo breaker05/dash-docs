@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { requireAdmin, requireEditor } from "@/server/auth-guards";
 import {
   ANTHROPIC_KEY_SETTING,
+  ASK_CORPUS_BUDGET_KEY,
   ASK_DISABLED_KEY,
   ASK_EFFORT_KEY,
   ASK_MODEL_KEY,
@@ -16,7 +17,7 @@ import {
   getSettings,
   setSetting,
 } from "@/server/settings";
-import { isAskEffort, isAskModelId } from "@/lib/ask-models";
+import { isAskEffort, isAskModelId, isCorpusBudget } from "@/lib/ask-models";
 import { extractGaId } from "@/lib/analytics";
 import { eq } from "drizzle-orm";
 import { pages } from "@/db/schema";
@@ -93,6 +94,20 @@ export async function updateAskEffortAction(opts: { effort: string }) {
   await setSetting(db, {
     key: ASK_EFFORT_KEY,
     value: opts.effort,
+    userId: user.id,
+  });
+  revalidatePath("/admin/settings");
+  revalidatePath("/", "layout");
+}
+
+export async function updateAskCorpusBudgetAction(opts: { budget: string }) {
+  const user = await requireAdmin();
+  if (!isCorpusBudget(opts.budget)) {
+    throw new Error("Unknown corpus budget");
+  }
+  await setSetting(db, {
+    key: ASK_CORPUS_BUDGET_KEY,
+    value: opts.budget,
     userId: user.id,
   });
   revalidatePath("/admin/settings");

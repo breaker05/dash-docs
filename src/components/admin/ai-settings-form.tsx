@@ -6,10 +6,11 @@ import { toast } from "sonner";
 import {
   setAskEnabledAction,
   updateAnthropicKeyAction,
+  updateAskCorpusBudgetAction,
   updateAskEffortAction,
   updateAskModelAction,
 } from "@/server/actions/settings";
-import { ASK_EFFORTS, ASK_MODELS } from "@/lib/ask-models";
+import { ASK_CORPUS_BUDGETS, ASK_EFFORTS, ASK_MODELS } from "@/lib/ask-models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,6 +96,7 @@ export function AiSettingsForm({
   enabled,
   model: initialModel,
   effort: initialEffort,
+  corpusBudget: initialCorpusBudget,
 }: {
   configured: boolean;
   /** where the active key comes from */
@@ -102,11 +104,13 @@ export function AiSettingsForm({
   enabled: boolean;
   model: string;
   effort: string;
+  corpusBudget: string;
 }) {
   const [value, setValue] = useState("");
   const [editing, setEditing] = useState(!configured);
   const [model, setModel] = useState(initialModel);
   const [effort, setEffort] = useState(initialEffort);
+  const [corpusBudget, setCorpusBudget] = useState(initialCorpusBudget);
   const [pending, startTransition] = useTransition();
 
   // effort only affects models that support adaptive thinking
@@ -151,6 +155,20 @@ export function AiSettingsForm({
       }
     });
 
+  const changeCorpusBudget = (next: string) =>
+    startTransition(async () => {
+      const prev = corpusBudget;
+      setCorpusBudget(next); // optimistic
+      try {
+        await updateAskCorpusBudgetAction({ budget: next });
+        const label = ASK_CORPUS_BUDGETS.find((b) => b.id === next)?.label ?? next;
+        toast.success(`Whole-docs budget set to ${label}`);
+      } catch (err) {
+        setCorpusBudget(prev);
+        toast.error(err instanceof Error ? err.message : "Update failed");
+      }
+    });
+
   const selects = (
     <>
       <ChoiceSelect
@@ -171,6 +189,14 @@ export function AiSettingsForm({
           onChange={changeEffort}
         />
       )}
+      <ChoiceSelect
+        id="ask-corpus-budget"
+        label="Whole-docs answering"
+        value={corpusBudget}
+        options={ASK_CORPUS_BUDGETS}
+        pending={pending}
+        onChange={changeCorpusBudget}
+      />
     </>
   );
 
