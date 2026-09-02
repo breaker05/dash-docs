@@ -1,13 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { pages } from "@/db/schema";
-import { searchPages } from "@/server/search";
 import {
   searchContextChunks,
   searchContextChunksByVector,
 } from "@/server/context-docs";
+import {
+  searchPageChunks,
+  searchPageChunksByVector,
+} from "@/server/pages/chunks";
 import { getEmbeddingProvider } from "@/server/embeddings";
 import { reciprocalRankFusion } from "@/lib/rrf";
 import { getAskConfig } from "@/server/settings";
@@ -87,90 +88,69 @@ export async function POST(request: Request) {
     ? await loadConversationHistory(db, existing.id)
     : [];
 
-  // retrieval: precise (AND) search first; when conversational phrasing
-  // leaves it thin, fill from a recall-mode (OR) search — ranking puts
-  // title matches first
+  // Retrieval is chunk-level over both the docs pages (the source of truth) and
+  // uploaded reference files. Precise (AND) keyword search first; when
+  // conversational phrasing leaves it thin, fall back to a recall-mode (OR)
+  // search. Chunking pages means the model gets the relevant SECTION, not a
+  // whole page truncated to its table of contents.
   const includeInternal = Boolean(session?.user);
-  const hits = await searchPages(db, {
+  const orQuery = buildOrQuery(question);
+
+  let pageChunkHits = await searchPageChunks(db, {
     query: question,
     includeInternal,
-    limit: 5,
+    limit: PAGE_SLOTS,
   });
-  if (hits.length < 3) {
-    const orQuery = buildOrQuery(question);
-    if (orQuery !== "") {
-      const seen = new Set(hits.map((h) => h.id));
-      const broad = await searchPages(db, {
-        query: orQuery,
-        includeInternal,
-        limit: 5,
-      });
-      for (const hit of broad) {
-        if (hits.length >= 5) break;
-        if (!seen.has(hit.id)) hits.push(hit);
-      }
-    }
+  if (pageChunkHits.length === 0 && orQuery !== "") {
+    pageChunkHits = await searchPageChunks(db, {
+      query: orQuery,
+      includeInternal,
+      limit: PAGE_SLOTS,
+    });
   }
-  const rows =
-    hits.length === 0
-      ? []
-      : await db
-          .select({
-            id: pages.id,
-            title: pages.publishedTitle,
-            path: pages.path,
-            markdown: pages.publishedContentMd,
-          })
-          .from(pages)
-          .where(
-            and(
-              inArray(
-                pages.id,
-                hits.map((h) => h.id),
-              ),
-              isNotNull(pages.publishedContentMd),
-              includeInternal
-                ? isNotNull(pages.publishedContentMd)
-                : eq(pages.effectiveVisibility, "public"),
-            ),
-          );
-  // keep search's relevance order; reference-file chunks fill after pages
-  // (same precise-then-recall fallback as pages — conversational phrasing
-  // rarely AND-matches inside a spec file)
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  let chunkHits = await searchContextChunks(db, {
+
+  let fileChunkHits = await searchContextChunks(db, {
     query: question,
     includeInternal,
     limit: FILE_CHUNK_SLOTS,
   });
-  if (chunkHits.length === 0) {
-    const orQuery = buildOrQuery(question);
-    if (orQuery !== "") {
-      chunkHits = await searchContextChunks(db, {
-        query: orQuery,
-        includeInternal,
-        limit: FILE_CHUNK_SLOTS,
-      });
-    }
+  if (fileChunkHits.length === 0 && orQuery !== "") {
+    fileChunkHits = await searchContextChunks(db, {
+      query: orQuery,
+      includeInternal,
+      limit: FILE_CHUNK_SLOTS,
+    });
   }
-  // Semantic pass (additive): when an embedding provider is configured, blend
-  // vector-similarity hits with the keyword hits via reciprocal rank fusion so
-  // conceptually-matching chunks surface even when they share no keywords (e.g.
-  // a "webhooks" question when the body says "event notifications"). Best-effort:
-  // if the embedding API or the pgvector query fails, we keep the keyword hits
-  // rather than failing the whole answer.
+
+  // Semantic pass (additive): embed the question once and blend vector-similarity
+  // hits into both page and file results via reciprocal rank fusion, so
+  // conceptually-matching sections surface even when they share no keywords with
+  // the question (e.g. a "webhooks" question when the docs say "event
+  // notifications"). Best-effort: if the embedding API or the pgvector query
+  // fails, keep the keyword hits rather than failing the whole answer.
   const embedder = getEmbeddingProvider();
   if (embedder) {
     try {
       const [queryVec] = await embedder.embed([question]);
       if (queryVec) {
-        const vectorHits = await searchContextChunksByVector(db, {
-          embedding: queryVec,
-          includeInternal,
-          limit: FILE_CHUNK_SLOTS,
-        });
-        chunkHits = reciprocalRankFusion(
-          [chunkHits, vectorHits],
+        const [pageVec, fileVec] = await Promise.all([
+          searchPageChunksByVector(db, {
+            embedding: queryVec,
+            includeInternal,
+            limit: PAGE_SLOTS,
+          }),
+          searchContextChunksByVector(db, {
+            embedding: queryVec,
+            includeInternal,
+            limit: FILE_CHUNK_SLOTS,
+          }),
+        ]);
+        pageChunkHits = reciprocalRankFusion(
+          [pageChunkHits, pageVec],
+          (c) => `${c.pageId}:${c.ord}`,
+        ).slice(0, PAGE_SLOTS);
+        fileChunkHits = reciprocalRankFusion(
+          [fileChunkHits, fileVec],
           (c) => `${c.docId}:${c.ord}`,
         ).slice(0, FILE_CHUNK_SLOTS);
       }
@@ -178,20 +158,16 @@ export async function POST(request: Request) {
       console.error("Ask AI semantic retrieval failed; keyword-only", err);
     }
   }
-  // Reserve slots for each source kind so a large reference file (many
-  // matching chunks) is never crowded out by page hits, and vice versa.
-  const pageSources: AskSource[] = hits
-    .map((h) => byId.get(h.id))
-    .filter((r): r is NonNullable<typeof r> => Boolean(r))
-    .slice(0, PAGE_SLOTS)
-    .map((r) => ({
-      n: 0,
-      title: r.title ?? "Untitled",
-      path: r.path,
-      markdown: r.markdown ?? "",
-      kind: "page" as const,
-    }));
-  const fileSources: AskSource[] = chunkHits.slice(0, FILE_CHUNK_SLOTS).map((c) => ({
+  // Reserve slots for each source kind so a large reference file (many matching
+  // chunks) is never crowded out by page hits, and vice versa.
+  const pageSources: AskSource[] = pageChunkHits.slice(0, PAGE_SLOTS).map((c) => ({
+    n: 0,
+    title: c.title,
+    path: c.path,
+    markdown: c.content,
+    kind: "page" as const,
+  }));
+  const fileSources: AskSource[] = fileChunkHits.slice(0, FILE_CHUNK_SLOTS).map((c) => ({
     n: 0,
     title: `${c.docName} (part ${c.ord + 1})`,
     path: "",

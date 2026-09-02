@@ -297,6 +297,29 @@ export const contextChunks = pgTable(
   (t) => [index("context_chunk_search_idx").using("gin", t.search)],
 );
 
+// Chunked published-page content for Ask AI retrieval — the semantic + keyword
+// index over the docs themselves (the source of truth), rebuilt on publish and
+// cleared on unpublish. Mirrors context_chunk: the pgvector `embedding` column
+// lives only on Neon (raw SQL), kept out of Drizzle so the PGlite test DB works.
+export const pageChunks = pgTable(
+  "page_chunk",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pageId: uuid("page_id")
+      .notNull()
+      .references(() => pages.id, { onDelete: "cascade" }),
+    ord: integer("ord").notNull(),
+    content: text("content").notNull(),
+    search: tsvector("search").generatedAlwaysAs(
+      (): ReturnType<typeof sql> => sql`to_tsvector('english', "content")`,
+    ),
+  },
+  (t) => [
+    index("page_chunk_search_idx").using("gin", t.search),
+    index("page_chunk_page_idx").on(t.pageId),
+  ],
+);
+
 // Fixed-window rate-limit counters (key embeds the window bucket).
 // Postgres-backed so limits hold across serverless instances; expired rows
 // are lazily cleaned up by the limiter itself.

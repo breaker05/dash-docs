@@ -17,14 +17,25 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Uploaded reference-file chunks.
 ALTER TABLE context_chunk
   ADD COLUMN IF NOT EXISTS embedding vector(1024);
 
--- HNSW index for fast approximate nearest-neighbour cosine search. Cosine
+-- Published-page chunks (the docs themselves — the source of truth).
+ALTER TABLE page_chunk
+  ADD COLUMN IF NOT EXISTS embedding vector(1024);
+
+-- HNSW indexes for fast approximate nearest-neighbour cosine search. Cosine
 -- (`vector_cosine_ops` / the `<=>` operator) matches how the app queries.
 -- HNSW builds incrementally, so it's safe to create before backfilling.
 CREATE INDEX IF NOT EXISTS context_chunk_embedding_idx
   ON context_chunk
   USING hnsw (embedding vector_cosine_ops);
 
--- After this runs, embed existing rows:  node scripts/backfill-embeddings.mjs
+CREATE INDEX IF NOT EXISTS page_chunk_embedding_idx
+  ON page_chunk
+  USING hnsw (embedding vector_cosine_ops);
+
+-- After this runs:
+--   1. Populate + embed page chunks:  npx tsx scripts/reindex-pages.ts
+--   2. Embed any remaining chunks:    npx tsx scripts/backfill-embeddings.ts
