@@ -155,21 +155,27 @@ export async function POST(request: Request) {
   }
   // Semantic pass (additive): when an embedding provider is configured, blend
   // vector-similarity hits with the keyword hits via reciprocal rank fusion so
-  // conceptually-matching chunks surface even when they share no keywords. No
-  // provider wired yet → this is skipped and retrieval stays keyword-only.
+  // conceptually-matching chunks surface even when they share no keywords (e.g.
+  // a "webhooks" question when the body says "event notifications"). Best-effort:
+  // if the embedding API or the pgvector query fails, we keep the keyword hits
+  // rather than failing the whole answer.
   const embedder = getEmbeddingProvider();
   if (embedder) {
-    const [queryVec] = await embedder.embed([question]);
-    if (queryVec) {
-      const vectorHits = await searchContextChunksByVector(db, {
-        embedding: queryVec,
-        includeInternal,
-        limit: FILE_CHUNK_SLOTS,
-      });
-      chunkHits = reciprocalRankFusion(
-        [chunkHits, vectorHits],
-        (c) => `${c.docId}:${c.ord}`,
-      ).slice(0, FILE_CHUNK_SLOTS);
+    try {
+      const [queryVec] = await embedder.embed([question]);
+      if (queryVec) {
+        const vectorHits = await searchContextChunksByVector(db, {
+          embedding: queryVec,
+          includeInternal,
+          limit: FILE_CHUNK_SLOTS,
+        });
+        chunkHits = reciprocalRankFusion(
+          [chunkHits, vectorHits],
+          (c) => `${c.docId}:${c.ord}`,
+        ).slice(0, FILE_CHUNK_SLOTS);
+      }
+    } catch (err) {
+      console.error("Ask AI semantic retrieval failed; keyword-only", err);
     }
   }
   // Reserve slots for each source kind so a large reference file (many
