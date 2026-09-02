@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  costOfUsage,
   DEFAULT_CORPUS_TOKEN_BUDGET,
   effectiveCorpusCharBudget,
   resolveAskModel,
@@ -39,5 +40,25 @@ describe("effectiveCorpusCharBudget", () => {
 
   it("a zero budget disables whole-corpus mode", () => {
     expect(effectiveCorpusCharBudget(sonnet, 0)).toBe(0);
+  });
+});
+
+describe("costOfUsage", () => {
+  it("prices each token class at the model's rate", () => {
+    // Sonnet 5: input $2, output $10, cacheRead $0.2 per 1M
+    const cost = costOfUsage(sonnet, {
+      input: 1000,
+      output: 500,
+      cacheRead: 100_000,
+      cacheWrite: 0,
+    });
+    // (1000*2 + 500*10 + 100000*0.2) / 1e6 = 27000/1e6
+    expect(cost).toBeCloseTo(0.027, 6);
+  });
+
+  it("is zero for an empty turn", () => {
+    expect(
+      costOfUsage(haiku, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }),
+    ).toBe(0);
   });
 });

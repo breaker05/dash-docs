@@ -2,6 +2,7 @@ import {
   bigserial,
   boolean,
   customType,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -391,6 +392,13 @@ export const messages = pgTable(
     content: text("content").notNull(),
     // cited sources for assistant turns: [{ n, title, path, kind }]
     sources: jsonb("sources").$type<MessageSource[]>(),
+    // token usage + computed dollar cost for assistant turns (null for user
+    // turns and for turns recorded before this shipped)
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    cacheReadTokens: integer("cache_read_tokens"),
+    cacheWriteTokens: integer("cache_write_tokens"),
+    costUsd: doublePrecision("cost_usd"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

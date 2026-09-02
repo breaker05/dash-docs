@@ -16,6 +16,16 @@ export type AskModel = {
   adaptiveThinking: boolean;
   /** context window in tokens — caps how much of the corpus can be sent. */
   contextTokens: number;
+  /**
+   * USD per 1M tokens, for cost accounting. cacheWrite is the 1h-TTL rate
+   * (2× input — whole-corpus mode caches with a 1h TTL); cacheRead is 0.1×.
+   */
+  pricing: {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+  };
 };
 
 export const ASK_MODELS: AskModel[] = [
@@ -25,6 +35,7 @@ export const ASK_MODELS: AskModel[] = [
     blurb: "Balanced quality and cost — recommended",
     adaptiveThinking: true,
     contextTokens: 1_000_000,
+    pricing: { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 4 },
   },
   {
     id: "claude-opus-5",
@@ -32,6 +43,7 @@ export const ASK_MODELS: AskModel[] = [
     blurb: "Highest quality, highest cost",
     adaptiveThinking: true,
     contextTokens: 1_000_000,
+    pricing: { input: 5, output: 25, cacheRead: 0.5, cacheWrite: 10 },
   },
   {
     id: "claude-haiku-4-5",
@@ -39,8 +51,28 @@ export const ASK_MODELS: AskModel[] = [
     blurb: "Fastest and cheapest",
     adaptiveThinking: false,
     contextTokens: 200_000,
+    pricing: { input: 1, output: 5, cacheRead: 0.1, cacheWrite: 2 },
   },
 ];
+
+export type TokenUsage = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+};
+
+/** Dollar cost of one model turn from its token usage and the model's rates. */
+export function costOfUsage(model: AskModel, u: TokenUsage): number {
+  const p = model.pricing;
+  return (
+    (u.input * p.input +
+      u.output * p.output +
+      u.cacheRead * p.cacheRead +
+      u.cacheWrite * p.cacheWrite) /
+    1_000_000
+  );
+}
 
 export const DEFAULT_ASK_MODEL_ID = "claude-sonnet-5";
 

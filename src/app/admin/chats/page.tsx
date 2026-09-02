@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import { listAllConversations } from "@/server/conversations";
 import { DeleteChatButton } from "@/components/admin/delete-chat-button";
+import { formatTokens, formatUsd } from "@/lib/format-usage";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Chats — Dash Docs" };
@@ -107,6 +108,16 @@ export default async function ChatsPage({
                       minute: "2-digit",
                     })}
                   </span>
+                  {c.totalTokens > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>{formatTokens(c.totalTokens)} tokens</span>
+                      <span>·</span>
+                      <span className="font-medium text-foreground/70">
+                        {formatUsd(c.totalCostUsd)}
+                      </span>
+                    </>
+                  )}
                 </span>
               </Link>
               <DeleteChatButton conversationId={c.id} />

@@ -50,6 +50,14 @@ export async function addMessage(
     role: "user" | "assistant";
     content: string;
     sources?: MessageSource[];
+    /** token usage + dollar cost for assistant turns */
+    usage?: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+    };
+    costUsd?: number;
   },
 ): Promise<void> {
   await db.insert(messages).values({
@@ -57,6 +65,11 @@ export async function addMessage(
     role: opts.role,
     content: opts.content,
     sources: opts.sources ?? null,
+    inputTokens: opts.usage?.input ?? null,
+    outputTokens: opts.usage?.output ?? null,
+    cacheReadTokens: opts.usage?.cacheRead ?? null,
+    cacheWriteTokens: opts.usage?.cacheWrite ?? null,
+    costUsd: opts.costUsd ?? null,
   });
   await db
     .update(conversations)
@@ -159,9 +172,20 @@ export type ConversationListItem = {
   userId: string | null;
   userEmail: string | null;
   messageCount: number;
+  totalTokens: number;
+  totalCostUsd: number;
   createdAt: Date;
   lastMessageAt: Date;
 };
+
+// summed token count of a conversation's messages, as a SQL fragment
+const tokenSumSql = sql<number>`coalesce((select sum(
+  coalesce(${messages.inputTokens}, 0) + coalesce(${messages.outputTokens}, 0)
+  + coalesce(${messages.cacheReadTokens}, 0) + coalesce(${messages.cacheWriteTokens}, 0)
+)::int from ${messages} where ${messages.conversationId} = ${conversations.id}), 0)`;
+
+const costSumSql = sql<number>`coalesce((select sum(${messages.costUsd})::float8
+  from ${messages} where ${messages.conversationId} = ${conversations.id}), 0)`;
 
 export async function listAllConversations(
   db: Db,
@@ -185,6 +209,8 @@ export async function listAllConversations(
       userId: conversations.userId,
       userEmail: users.email,
       messageCount: sql<number>`(select count(*)::int from ${messages} where ${messages.conversationId} = ${conversations.id})`,
+      totalTokens: tokenSumSql,
+      totalCostUsd: costSumSql,
       createdAt: conversations.createdAt,
       lastMessageAt: conversations.lastMessageAt,
     })

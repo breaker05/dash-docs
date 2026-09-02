@@ -6,6 +6,7 @@ import { requireUser } from "@/server/auth-guards";
 import { getConversation } from "@/server/conversations";
 import { AnswerMarkdown } from "@/components/public/answer-markdown";
 import { DeleteChatButton } from "@/components/admin/delete-chat-button";
+import { formatTokens, formatUsd } from "@/lib/format-usage";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Chat — Dash Docs" };
@@ -23,6 +24,16 @@ export default async function ChatDetailPage({
   if (!chat) notFound();
 
   const { conversation, userEmail, messages } = chat;
+  const totalTokens = messages.reduce(
+    (n, m) =>
+      n +
+      (m.inputTokens ?? 0) +
+      (m.outputTokens ?? 0) +
+      (m.cacheReadTokens ?? 0) +
+      (m.cacheWriteTokens ?? 0),
+    0,
+  );
+  const totalCost = messages.reduce((n, m) => n + (m.costUsd ?? 0), 0);
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
@@ -55,6 +66,16 @@ export default async function ChatDetailPage({
               <>
                 <span>·</span>
                 <span>internal pages in scope</span>
+              </>
+            )}
+            {totalTokens > 0 && (
+              <>
+                <span>·</span>
+                <span>{formatTokens(totalTokens)} tokens</span>
+                <span>·</span>
+                <span className="font-medium text-foreground">
+                  {formatUsd(totalCost)}
+                </span>
               </>
             )}
           </p>
@@ -102,6 +123,19 @@ export default async function ChatDetailPage({
                     </Link>
                   ),
                 )}
+              </span>
+            )}
+            {m.role === "assistant" && m.costUsd != null && (
+              <span className="mt-2 block text-[0.7rem] text-muted-foreground/70">
+                {formatTokens(
+                  (m.inputTokens ?? 0) +
+                    (m.outputTokens ?? 0) +
+                    (m.cacheReadTokens ?? 0) +
+                    (m.cacheWriteTokens ?? 0),
+                )}{" "}
+                tokens · {formatUsd(m.costUsd)}
+                {(m.cacheReadTokens ?? 0) > 0 &&
+                  ` · ${formatTokens(m.cacheReadTokens ?? 0)} cached`}
               </span>
             )}
           </div>

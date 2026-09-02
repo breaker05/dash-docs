@@ -255,6 +255,33 @@ describe("admin review", () => {
     expect(onlyAnon[0].userEmail).toBeNull();
   });
 
+  it("sums token usage and dollar cost across a conversation's messages", async () => {
+    const id = await createConversation(db, {
+      ...base,
+      userId: "u1",
+      firstQuestion: "cost me",
+    });
+    await addMessage(db, { conversationId: id, role: "user", content: "q" });
+    await addMessage(db, {
+      conversationId: id,
+      role: "assistant",
+      content: "a",
+      usage: { input: 100, output: 50, cacheRead: 1000, cacheWrite: 0 },
+      costUsd: 0.0123,
+    });
+    await addMessage(db, {
+      conversationId: id,
+      role: "assistant",
+      content: "b",
+      usage: { input: 200, output: 80, cacheRead: 0, cacheWrite: 500 },
+      costUsd: 0.0077,
+    });
+
+    const [row] = await listAllConversations(db, {});
+    expect(row.totalTokens).toBe(100 + 50 + 1000 + 200 + 80 + 500);
+    expect(row.totalCostUsd).toBeCloseTo(0.02, 6);
+  });
+
   it("searches titles", async () => {
     await createConversation(db, {
       ...base,

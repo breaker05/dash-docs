@@ -26,7 +26,7 @@ import {
   trimHistory,
   type AskSource,
 } from "@/lib/ask-prompt";
-import { effectiveCorpusCharBudget } from "@/lib/ask-models";
+import { costOfUsage, effectiveCorpusCharBudget } from "@/lib/ask-models";
 import {
   checkRateLimit,
   rateLimitedResponse,
@@ -252,6 +252,9 @@ export async function POST(request: Request) {
       send(controller, { type: "meta", conversationId });
 
       let answer = "";
+      let usage:
+        | { input: number; output: number; cacheRead: number; cacheWrite: number }
+        | undefined;
       try {
         const messageStream = client.messages.stream({
           model: model.id,
@@ -282,6 +285,15 @@ export async function POST(request: Request) {
             send(controller, { type: "delta", text: event.delta.text });
           }
         }
+        // Capture token usage for cost accounting (input, output, and the
+        // cache read/write that dominate whole-corpus cost).
+        const u = (await messageStream.finalMessage()).usage;
+        usage = {
+          input: u.input_tokens ?? 0,
+          output: u.output_tokens ?? 0,
+          cacheRead: u.cache_read_input_tokens ?? 0,
+          cacheWrite: u.cache_creation_input_tokens ?? 0,
+        };
         // Show only the sources the model actually cited — in whole-corpus mode
         // every page is supplied, so surfacing them all would be noise.
         const cited = citedSourceNumbers(answer);
@@ -306,6 +318,8 @@ export async function POST(request: Request) {
             role: "assistant",
             content: answer,
             sources: sourceRefs.filter((s) => cited.has(s.n)),
+            usage,
+            costUsd: usage ? costOfUsage(model, usage) : undefined,
           }).catch(() => {});
         }
         controller.close();
