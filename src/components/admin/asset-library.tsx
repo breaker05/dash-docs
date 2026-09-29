@@ -4,6 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
+  ChevronLeft,
+  ChevronRight,
   Copy,
   ExternalLink,
   FileText,
@@ -53,6 +55,8 @@ const FILTERS = [
 ] as const;
 type Filter = (typeof FILTERS)[number]["key"];
 
+const PAGE_SIZE = 24;
+
 const SETTING_LABELS: Record<string, string> = {
   "pdf.logoUrl": "PDF logo",
 };
@@ -72,6 +76,7 @@ export function AssetLibrary({
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
   const [pending, startTransition] = useTransition();
 
   const counts = useMemo(() => {
@@ -95,6 +100,14 @@ export function AssetLibrary({
           a.pages.some((p) => p.title.toLowerCase().includes(q))),
     );
   }, [assets, filter, query]);
+
+  // clamp rather than reset in an effect: deletes shrink the list under us
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount - 1);
+  const pageItems = visible.slice(
+    current * PAGE_SIZE,
+    (current + 1) * PAGE_SIZE,
+  );
 
   const unused = assets.filter((a) => a.status === "unused");
   const unusedBytes = unused.reduce((n, a) => n + a.sizeBytes, 0);
@@ -128,7 +141,10 @@ export function AssetLibrary({
             <button
               key={f.key}
               type="button"
-              onClick={() => setFilter(f.key)}
+              onClick={() => {
+                setFilter(f.key);
+                setPage(0);
+              }}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                 filter === f.key
@@ -145,7 +161,10 @@ export function AssetLibrary({
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
             placeholder="Filter by file or page"
             className="pl-8"
           />
@@ -202,19 +221,108 @@ export function AssetLibrary({
           No images match.
         </p>
       ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
-          {visible.map((a) => (
-            <AssetCard
-              key={a.id}
-              asset={a}
-              canDelete={canDelete}
-              pending={pending}
-              onDelete={() => remove([a.id], `“${a.filename}”`)}
+        <>
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+            {pageItems.map((a) => (
+              <AssetCard
+                key={a.id}
+                asset={a}
+                canDelete={canDelete}
+                pending={pending}
+                onDelete={() => remove([a.id], `“${a.filename}”`)}
+              />
+            ))}
+          </ul>
+          {pageCount > 1 && (
+            <Pager
+              page={current}
+              pageCount={pageCount}
+              total={visible.length}
+              onChange={(p) => {
+                setPage(p);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
             />
-          ))}
-        </ul>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/** Page numbers to show: first, last, and a window around the current one. */
+function pageList(page: number, pageCount: number): (number | "gap")[] {
+  const out: (number | "gap")[] = [];
+  for (let i = 0; i < pageCount; i++) {
+    if (i === 0 || i === pageCount - 1 || Math.abs(i - page) <= 1) out.push(i);
+    else if (out.at(-1) !== "gap") out.push("gap");
+  }
+  return out;
+}
+
+function Pager({
+  page,
+  pageCount,
+  total,
+  onChange,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  onChange: (page: number) => void;
+}) {
+  const first = page * PAGE_SIZE + 1;
+  const last = Math.min(total, (page + 1) * PAGE_SIZE);
+  return (
+    <nav
+      aria-label="Image pages"
+      className="flex flex-wrap items-center justify-between gap-2 pt-2"
+    >
+      <p className="text-xs text-muted-foreground tabular-nums">
+        {first}–{last} of {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          title="Previous page"
+          disabled={page === 0}
+          onClick={() => onChange(page - 1)}
+        >
+          <ChevronLeft />
+        </Button>
+        {pageList(page, pageCount).map((p, i) =>
+          p === "gap" ? (
+            <span key={`gap-${i}`} className="px-1 text-xs text-muted-foreground">
+              …
+            </span>
+          ) : (
+            <Button
+              key={p}
+              type="button"
+              size="sm"
+              variant={p === page ? "secondary" : "ghost"}
+              aria-current={p === page ? "page" : undefined}
+              className="min-w-8 tabular-nums"
+              onClick={() => onChange(p)}
+            >
+              {p + 1}
+            </Button>
+          ),
+        )}
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          title="Next page"
+          disabled={page === pageCount - 1}
+          onClick={() => onChange(page + 1)}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
+    </nav>
   );
 }
 
