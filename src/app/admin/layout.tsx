@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toaster } from "@/components/ui/sonner";
 import {
   ExternalLink,
+  Images,
   Lightbulb,
   MessagesSquare,
   Paperclip,
@@ -144,6 +145,12 @@ export default async function AdminLayout({
             className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
           >
             <Lightbulb className="size-4" /> Insights
+          </Link>
+          <Link
+            href="/admin/assets"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Images className="size-4" /> Images
           </Link>
           {session.user.role === "admin" && (
             <>
