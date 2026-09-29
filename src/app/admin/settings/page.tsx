@@ -130,6 +130,8 @@ export default async function SettingsPage() {
         Keys let AI tools and internal systems (chatbots, Claude Code, skills)
         read <strong>internal</strong> published pages through the MCP server
         at <code className="rounded bg-muted px-1 py-0.5 text-xs">/api/mcp</code>.
+        Keys marked <strong>write</strong> can also create and edit page
+        drafts and upload images — publishing still happens here, by a person.
         Without a key, MCP only ever serves public pages. Send the key as an{" "}
         <code className="rounded bg-muted px-1 py-0.5 text-xs">
           Authorization: Bearer
@@ -141,6 +143,7 @@ export default async function SettingsPage() {
           id: k.id,
           name: k.name,
           keyPrefix: k.keyPrefix,
+          canWrite: k.canWrite,
           createdAt: k.createdAt.toISOString(),
           lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
           revokedAt: k.revokedAt?.toISOString() ?? null,

@@ -7,10 +7,12 @@ import { createApiKey, deleteApiKey, revokeApiKey } from "@/server/api-keys";
 
 export async function createApiKeyAction(opts: {
   name: string;
+  canWrite?: boolean;
 }): Promise<{ token: string }> {
   const user = await requireAdmin();
   const { token } = await createApiKey(db, {
     name: opts.name,
+    canWrite: opts.canWrite ?? false,
     userId: user.id,
   });
   revalidatePath("/admin/settings");

@@ -15,7 +15,7 @@ function hashKey(token: string): string {
  */
 export async function createApiKey(
   db: Db,
-  opts: { name: string; userId: string },
+  opts: { name: string; userId: string; canWrite?: boolean },
 ): Promise<{ id: string; token: string }> {
   const name = opts.name.trim();
   if (name === "") throw new Error("Key name is required");
@@ -26,11 +26,20 @@ export async function createApiKey(
       name,
       keyHash: hashKey(token),
       keyPrefix: token.slice(0, KEY_PREFIX.length + 6),
+      canWrite: opts.canWrite ?? false,
       createdBy: opts.userId,
     })
     .returning({ id: apiKeys.id });
   return { id: row.id, token };
 }
+
+export type VerifiedApiKey = {
+  id: string;
+  name: string;
+  canWrite: boolean;
+  /** the admin who minted the key — writes are attributed to them */
+  createdBy: string | null;
+};
 
 /**
  * Resolve a bearer token to an active key, bumping last_used_at.
@@ -39,13 +48,18 @@ export async function createApiKey(
 export async function verifyApiKey(
   db: Db,
   token: string,
-): Promise<{ id: string; name: string } | null> {
+): Promise<VerifiedApiKey | null> {
   if (!token.startsWith(KEY_PREFIX)) return null;
   const [row] = await db
     .update(apiKeys)
     .set({ lastUsedAt: sql`now()` })
     .where(and(eq(apiKeys.keyHash, hashKey(token)), isNull(apiKeys.revokedAt)))
-    .returning({ id: apiKeys.id, name: apiKeys.name });
+    .returning({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      canWrite: apiKeys.canWrite,
+      createdBy: apiKeys.createdBy,
+    });
   return row ?? null;
 }
 
@@ -55,6 +69,7 @@ export async function listApiKeys(db: Db) {
       id: apiKeys.id,
       name: apiKeys.name,
       keyPrefix: apiKeys.keyPrefix,
+      canWrite: apiKeys.canWrite,
       createdAt: apiKeys.createdAt,
       lastUsedAt: apiKeys.lastUsedAt,
       revokedAt: apiKeys.revokedAt,

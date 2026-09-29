@@ -1,0 +1,1 @@
+ALTER TABLE "api_key" ADD COLUMN "can_write" boolean DEFAULT false NOT NULL;

@@ -28,12 +28,28 @@ afterEach(async () => {
 });
 
 describe("api keys", () => {
+  it("mints write-enabled keys only when asked", async () => {
+    const { token: readToken } = await createApiKey(db, { name: "Reader", userId });
+    const { token: writeToken } = await createApiKey(db, {
+      name: "Author",
+      userId,
+      canWrite: true,
+    });
+    expect((await verifyApiKey(db, readToken))?.canWrite).toBe(false);
+    expect((await verifyApiKey(db, writeToken))?.canWrite).toBe(true);
+  });
+
   it("creates, verifies, and tracks usage", async () => {
     const { id, token } = await createApiKey(db, { name: "Mapping bot", userId });
     expect(token).toMatch(/^dashdocs_[0-9a-f]{48}$/);
 
     const verified = await verifyApiKey(db, token);
-    expect(verified).toEqual({ id, name: "Mapping bot" });
+    expect(verified).toEqual({
+      id,
+      name: "Mapping bot",
+      canWrite: false,
+      createdBy: userId,
+    });
 
     const [listed] = await listApiKeys(db);
     expect(listed.keyPrefix).toBe(token.slice(0, 15));

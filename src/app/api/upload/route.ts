@@ -1,23 +1,31 @@
 import { NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { assets } from "@/db/schema";
+import { verifyApiKey } from "@/server/api-keys";
+import { resolveImageType, storeImage, UploadError } from "@/server/uploads";
 
 export const runtime = "nodejs";
 
-const ALLOWED_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "image/svg+xml",
-]);
-const MAX_BYTES = 10 * 1024 * 1024;
+/**
+ * Who is uploading: a signed-in editor (the editor's drag/paste/toolbar), or
+ * a write-enabled API key (Claude Code / scripts: `curl -F file=@shot.png
+ * -H "Authorization: Bearer dashdocs_…"`). Returns the user id to attribute,
+ * undefined when unauthorized.
+ */
+async function uploader(request: Request): Promise<string | null | undefined> {
+  const header = request.headers.get("authorization");
+  if (header) {
+    const match = header.match(/^Bearer\s+(.+)$/i);
+    const key = match ? await verifyApiKey(db, match[1].trim()) : null;
+    return key?.canWrite ? key.createdBy : undefined;
+  }
+  const session = await auth();
+  return session?.user?.id ?? undefined;
+}
 
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await uploader(request);
+  if (userId === undefined) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,32 +34,19 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "No file provided" }, { status: 400 });
   }
-  if (!ALLOWED_TYPES.has(file.type)) {
-    return NextResponse.json(
-      { error: `Unsupported file type: ${file.type}` },
-      { status: 415 },
-    );
+
+  try {
+    const { url } = await storeImage(db, {
+      bytes: file,
+      filename: file.name,
+      contentType: resolveImageType(file.type, file.name),
+      userId,
+    });
+    return NextResponse.json({ url, markdown: `![](${url})` });
+  } catch (e) {
+    if (e instanceof UploadError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    throw e;
   }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json(
-      { error: "File too large (max 10MB)" },
-      { status: 413 },
-    );
-  }
-
-  const blob = await put(`uploads/${file.name}`, file, {
-    access: "public",
-    addRandomSuffix: true,
-  });
-
-  await db.insert(assets).values({
-    blobUrl: blob.url,
-    pathname: blob.pathname,
-    filename: file.name,
-    contentType: file.type,
-    sizeBytes: file.size,
-    uploadedBy: session.user.id,
-  });
-
-  return NextResponse.json({ url: blob.url });
 }

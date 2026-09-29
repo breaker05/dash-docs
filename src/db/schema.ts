@@ -330,13 +330,16 @@ export const rateLimits = pgTable("rate_limit", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
 });
 
-// API keys for machine access (MCP internal docs). Only a SHA-256 hash of
+// API keys for machine access (MCP internal docs, optional draft authoring). Only a SHA-256 hash of
 // the key is stored; the raw key is shown once at creation.
 export const apiKeys = pgTable("api_key", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   keyHash: text("key_hash").notNull().unique(),
   keyPrefix: text("key_prefix").notNull(),
+  // read-only keys unlock internal pages; write keys can also create and
+  // edit page DRAFTS (never publish) and upload images, attributed to createdBy
+  canWrite: boolean("can_write").notNull().default(false),
   createdBy: text("created_by").references(() => users.id),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

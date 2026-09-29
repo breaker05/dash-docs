@@ -26,6 +26,7 @@ export type ApiKeyRow = {
   id: string;
   name: string;
   keyPrefix: string;
+  canWrite: boolean;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -82,6 +83,7 @@ function ConfirmButton({
 
 export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
   const [name, setName] = useState("");
+  const [canWrite, setCanWrite] = useState(false);
   const [freshToken, setFreshToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -89,16 +91,17 @@ export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
   return (
     <div className="space-y-4">
       <form
-        className="flex gap-1.5"
+        className="space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (name.trim() === "") return;
           startTransition(async () => {
             try {
-              const { token } = await createApiKeyAction({ name });
+              const { token } = await createApiKeyAction({ name, canWrite });
               setFreshToken(token);
               setCopied(false);
               setName("");
+              setCanWrite(false);
             } catch (err) {
               toast.error(
                 err instanceof Error ? err.message : "Create failed",
@@ -107,15 +110,33 @@ export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
           });
         }}
       >
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Key name, e.g. “Mapping assistant”"
-          className="h-9"
-        />
-        <Button type="submit" disabled={pending || name.trim() === ""}>
-          Create key
-        </Button>
+        <div className="flex gap-1.5">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Key name, e.g. “Mapping assistant”"
+            className="h-9"
+          />
+          <Button type="submit" disabled={pending || name.trim() === ""}>
+            Create key
+          </Button>
+        </div>
+        <label className="flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={canWrite}
+            onChange={(e) => setCanWrite(e.target.checked)}
+            className="mt-0.5 size-3.5 accent-primary"
+          />
+          <span>
+            <span className="font-medium text-foreground">
+              Allow writing drafts
+            </span>{" "}
+            — the key can also create and edit page drafts and upload images
+            (e.g. Claude Code writing docs from a codebase). Changes are
+            attributed to you and never published automatically.
+          </span>
+        </label>
       </form>
 
       {freshToken && (
@@ -164,6 +185,11 @@ export function McpKeys({ keys }: { keys: ApiKeyRow[] }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
                   {k.name}
+                  {k.canWrite && !k.revokedAt && (
+                    <span className="ml-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[0.65rem] font-normal text-primary">
+                      read + write drafts
+                    </span>
+                  )}
                   {k.revokedAt && (
                     <span className="ml-2 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[0.65rem] font-normal text-red-700">
                       revoked

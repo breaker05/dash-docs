@@ -145,6 +145,44 @@ export default function McpPage() {
         <code className="rounded bg-muted px-1 py-0.5">get_context_file</code>{" "}
         for the team&apos;s uploaded reference files (API specs, schemas).
       </p>
+
+      <h2 className="mb-3 mt-10 text-lg font-semibold tracking-tight">
+        Writing docs from your codebase
+      </h2>
+      <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+        A key created with <strong>Allow writing drafts</strong> also lets an
+        assistant like Claude Code draft docs straight into this site: it
+        can see the full page tree (drafts included), propose where new pages
+        belong, create and update page drafts, and upload screenshots and
+        diagrams to the same image storage the editor uses. Nothing is
+        published automatically — each change comes back with an editor link
+        for a person to review and publish, and edits to existing pages are
+        checkpointed in the page&apos;s History.
+      </p>
+      <p className="mb-3 text-sm leading-relaxed text-muted-foreground">
+        Write tools:{" "}
+        {[
+          "list_page_tree",
+          "get_draft",
+          "create_page",
+          "update_page",
+          "upload_image",
+          "get_authoring_guide",
+        ].map((name, i) => (
+          <span key={name}>
+            {i > 0 && ", "}
+            <code className="rounded bg-muted px-1 py-0.5">{name}</code>
+          </span>
+        ))}
+        , plus a{" "}
+        <code className="rounded bg-muted px-1 py-0.5">document_code</code>{" "}
+        prompt that walks through the whole workflow. With a shell, images
+        can be uploaded straight from disk:
+      </p>
+      <pre className="mb-4 overflow-x-auto rounded-xl border bg-muted/50 p-4 text-xs leading-relaxed">
+        {`curl -F "file=@diagram.png" \\
+  -H "Authorization: Bearer dashdocs_…" ${site}/api/upload`}
+      </pre>
     </div>
   );
 }
