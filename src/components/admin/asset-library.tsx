@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   ImageOff,
+  Loader2,
   Search,
   Settings,
   Trash2,
@@ -68,7 +69,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function AssetLibrary({
-  assets,
+  assets: allAssets,
   canDelete,
 }: {
   assets: AssetRow[];
@@ -77,7 +78,14 @@ export function AssetLibrary({
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(0);
-  const [pending, startTransition] = useTransition();
+  const [busy, setBusy] = useState(false);
+  // hide deleted rows as soon as the server confirms; the revalidated list
+  // (which re-scans every page for usage) lands later
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set());
+  const assets = useMemo(
+    () => allAssets.filter((a) => !removed.has(a.id)),
+    [allAssets, removed],
+  );
 
   const counts = useMemo(() => {
     const c: Record<Filter, number> = {
@@ -112,16 +120,24 @@ export function AssetLibrary({
   const unused = assets.filter((a) => a.status === "unused");
   const unusedBytes = unused.reduce((n, a) => n + a.sizeBytes, 0);
 
-  function remove(ids: string[], label: string) {
-    startTransition(async () => {
-      try {
-        const out = await deleteAssetsAction({ ids });
-        if ("error" in out) toast.error(out.error);
-        else toast.success(`Deleted ${label}`);
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Delete failed");
+  /** Resolves true when the delete succeeded (so the dialog can close). */
+  async function remove(ids: string[], label: string): Promise<boolean> {
+    setBusy(true);
+    try {
+      const out = await deleteAssetsAction({ ids });
+      if ("error" in out) {
+        toast.error(out.error);
+        return false;
       }
-    });
+      setRemoved((prev) => new Set([...prev, ...ids]));
+      toast.success(`Deleted ${label}`);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+      return false;
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (assets.length === 0) {
@@ -170,49 +186,31 @@ export function AssetLibrary({
           />
         </div>
         {canDelete && unused.length > 0 && (
-          <AlertDialog>
-            <AlertDialogTrigger
-              render={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="ml-auto text-destructive"
-                  disabled={pending}
-                />
-              }
-            >
-              <Trash2 /> Delete {unused.length} unused
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Delete {unused.length} unused{" "}
-                  {unused.length === 1 ? "image" : "images"}?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  Frees {formatBytes(unusedBytes)}. None of these are
-                  referenced by a page, its history or a setting. Links to them
-                  from outside the docs will stop working. This cannot be
-                  undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-destructive text-white hover:bg-destructive/90"
-                  onClick={() =>
-                    remove(
-                      unused.map((a) => a.id),
-                      `${unused.length} unused ${unused.length === 1 ? "image" : "images"}`,
-                    )
-                  }
-                >
-                  Delete all unused
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          <ConfirmDelete
+            trigger={
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto text-destructive"
+                disabled={busy}
+              />
+            }
+            triggerLabel={
+              <>
+                <Trash2 /> Delete {unused.length} unused
+              </>
+            }
+            title={`Delete ${unused.length} unused ${unused.length === 1 ? "image" : "images"}?`}
+            description={`Frees ${formatBytes(unusedBytes)}. None of these are referenced by a page, its history or a setting. Links to them from outside the docs will stop working. This cannot be undone.`}
+            confirmLabel="Delete all unused"
+            onConfirm={() =>
+              remove(
+                unused.map((a) => a.id),
+                `${unused.length} unused ${unused.length === 1 ? "image" : "images"}`,
+              )
+            }
+          />
         )}
       </div>
 
@@ -228,7 +226,7 @@ export function AssetLibrary({
                 key={a.id}
                 asset={a}
                 canDelete={canDelete}
-                pending={pending}
+                busy={busy}
                 onDelete={() => remove([a.id], `“${a.filename}”`)}
               />
             ))}
@@ -329,13 +327,13 @@ function Pager({
 function AssetCard({
   asset: a,
   canDelete,
-  pending,
+  busy,
   onDelete,
 }: {
   asset: AssetRow;
   canDelete: boolean;
-  pending: boolean;
-  onDelete: () => void;
+  busy: boolean;
+  onDelete: () => Promise<boolean>;
 }) {
   const [broken, setBroken] = useState(false);
 
@@ -402,46 +400,92 @@ function AssetCard({
             <ExternalLink />
           </Button>
           {canDelete && a.status !== "in-use" && (
-            <AlertDialog>
-              <AlertDialogTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon-sm"
-                    variant="ghost"
-                    title="Delete"
-                    className="ml-auto text-destructive"
-                    disabled={pending}
-                  />
-                }
-              >
-                <Trash2 />
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Delete “{a.filename}”?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {a.status === "history"
-                      ? `No current page uses it, but ${a.historyPageCount} ${a.historyPageCount === 1 ? "page's" : "pages'"} version history does — restoring those versions would show a broken image. `
-                      : "No page, version history or setting references it. "}
-                    This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-white hover:bg-destructive/90"
-                    onClick={onDelete}
-                  >
-                    Delete image
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <ConfirmDelete
+              trigger={
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  title="Delete"
+                  className="ml-auto text-destructive"
+                  disabled={busy}
+                />
+              }
+              triggerLabel={<Trash2 />}
+              title={`Delete “${a.filename}”?`}
+              description={`${
+                a.status === "history"
+                  ? `No current page uses it, but ${a.historyPageCount} ${a.historyPageCount === 1 ? "page's" : "pages'"} version history does — restoring those versions would show a broken image.`
+                  : "No page, version history or setting references it."
+              } This cannot be undone.`}
+              confirmLabel="Delete image"
+              onConfirm={onDelete}
+            />
           )}
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * Confirm dialog that stays open with a spinner while the delete runs, and
+ * closes itself once it succeeds (AlertDialogAction doesn't close on its own).
+ */
+function ConfirmDelete({
+  trigger,
+  triggerLabel,
+  title,
+  description,
+  confirmLabel,
+  onConfirm,
+}: {
+  trigger: ReactElement;
+  triggerLabel: ReactNode;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => Promise<boolean>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [working, setWorking] = useState(false);
+
+  return (
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!working) setOpen(next);
+      }}
+    >
+      <AlertDialogTrigger render={trigger}>{triggerLabel}</AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={working}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            className="bg-destructive text-white hover:bg-destructive/90"
+            disabled={working}
+            onClick={async () => {
+              setWorking(true);
+              const ok = await onConfirm();
+              setWorking(false);
+              if (ok) setOpen(false);
+            }}
+          >
+            {working ? (
+              <>
+                <Loader2 className="animate-spin" /> Deleting…
+              </>
+            ) : (
+              confirmLabel
+            )}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }
 
