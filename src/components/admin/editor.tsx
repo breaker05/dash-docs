@@ -56,7 +56,7 @@ export function PageEditor({
   tags,
   linkTargets = [],
 }: {
-  page: PageMeta & { contentMd: string; draftUpdatedAt?: string };
+  page: PageMeta & { contentMd: string };
   role: "editor" | "admin";
   tags: { all: { id: string; name: string }[]; selected: string[] };
   linkTargets?: LinkTarget[];
@@ -67,6 +67,7 @@ export function PageEditor({
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [conflict, setConflict] = useState(false);
   const [otherEditors, setOtherEditors] = useState<string[]>([]);
+  const [updatedAt, setUpdatedAt] = useState(page.draftUpdatedAt);
 
   // single source of truth for content: the markdown string
   const markdownRef = useRef(page.contentMd);
@@ -101,6 +102,7 @@ export function PageEditor({
           return;
         }
         baseDraftRef.current = result.draftUpdatedAt;
+        setUpdatedAt(result.draftUpdatedAt);
         setSaveState("saved");
       } catch (e) {
         setSaveState("dirty");
@@ -311,7 +313,11 @@ export function PageEditor({
             />
           )}
         </div>
-        <MetadataPanel page={{ ...page, title }} role={role} tags={tags} />
+        <MetadataPanel
+          page={{ ...page, title, draftUpdatedAt: updatedAt }}
+          role={role}
+          tags={tags}
+        />
       </div>
     </div>
   );

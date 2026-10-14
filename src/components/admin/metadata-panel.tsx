@@ -52,7 +52,19 @@ export type PageMeta = {
   effectiveVisibility: "public" | "internal";
   published: boolean;
   hasUnpublishedChanges: boolean;
+  createdAt?: string;
+  draftUpdatedAt?: string;
 };
+
+function formatTimestamp(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export function MetadataPanel({
   page,
@@ -89,6 +101,26 @@ export function MetadataPanel({
           )}
           {page.isHome && <Badge variant="outline">Home page</Badge>}
         </div>
+        {(page.createdAt || page.draftUpdatedAt) && (
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 pt-1 text-xs text-muted-foreground">
+            {page.createdAt && (
+              <>
+                <dt>Created</dt>
+                <dd suppressHydrationWarning className="text-foreground/80">
+                  {formatTimestamp(page.createdAt)}
+                </dd>
+              </>
+            )}
+            {page.draftUpdatedAt && (
+              <>
+                <dt>Last updated</dt>
+                <dd suppressHydrationWarning className="text-foreground/80">
+                  {formatTimestamp(page.draftUpdatedAt)}
+                </dd>
+              </>
+            )}
+          </dl>
+        )}
         {role === "admin" ? (
           <div className="flex gap-1.5 pt-1">
             <Button

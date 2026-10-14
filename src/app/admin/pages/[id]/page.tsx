@@ -45,6 +45,7 @@ export default async function EditPage({
         title: page.title,
         contentMd: page.contentMd,
         draftUpdatedAt: page.draftUpdatedAt.toISOString(),
+        createdAt: page.createdAt.toISOString(),
         slug: page.slug,
         path: page.path,
         isHome: page.isHome,
