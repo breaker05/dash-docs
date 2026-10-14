@@ -55,14 +55,16 @@ const REASSURANCE = [
   "Almost there…",
 ];
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ label }: { label?: string | null }) {
   const [secs, setSecs] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setSecs((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const message =
-    secs >= 4
+  // a live-data lookup in progress says what it's doing
+  const message = label
+    ? label
+    : secs >= 4
       ? REASSURANCE[Math.min(Math.floor((secs - 4) / 5), REASSURANCE.length - 1)]
       : null;
 
@@ -96,6 +98,8 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // what a live-data lookup is doing right now ("Querying dash…"), team only
+  const [status, setStatus] = useState<string | null>(null);
   const [view, setView] = useState<"chat" | "history">("chat");
   const [chats, setChats] = useState<MyChatSummary[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -193,9 +197,14 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
               | { type: "meta"; conversationId: string }
               | { type: "delta"; text: string }
               | { type: "sources"; sources: Source[] }
+              | { type: "status"; text: string }
               | { type: "error"; message: string };
             if (parsed.type === "meta") setConversationId(parsed.conversationId);
-            else if (parsed.type === "delta") append(parsed.text);
+            else if (parsed.type === "status") setStatus(parsed.text);
+            else if (parsed.type === "delta") {
+              setStatus(null);
+              append(parsed.text);
+            }
             else if (parsed.type === "sources") append("", parsed.sources);
             else append(`\n${parsed.message}`);
           } catch {
@@ -208,6 +217,7 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
       append("Connection lost — try again.");
     } finally {
       setBusy(false);
+      setStatus(null);
       scrollDown();
     }
   }
@@ -335,9 +345,16 @@ export function AskDocs({ isSignedIn = false }: { isSignedIn?: boolean }) {
               >
                 {turn.role === "assistant" ? (
                   turn.content ? (
-                    <AnswerMarkdown text={turn.content} />
+                    <>
+                      <AnswerMarkdown text={turn.content} />
+                      {busy && status && i === turns.length - 1 && (
+                        <div className="mt-2">
+                          <ThinkingIndicator label={status} />
+                        </div>
+                      )}
+                    </>
                   ) : busy && i === turns.length - 1 ? (
-                    <ThinkingIndicator />
+                    <ThinkingIndicator label={status} />
                   ) : null
                 ) : (
                   turn.content

@@ -19,6 +19,7 @@ import {
   Lightbulb,
   MessagesSquare,
   Paperclip,
+  Plug,
   Settings,
   Tags,
   Users,
@@ -165,6 +166,12 @@ export default async function AdminLayout({
                 className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
               >
                 <Paperclip className="size-4" /> AI context
+              </Link>
+              <Link
+                href="/admin/integrations"
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              >
+                <Plug className="size-4" /> Integrations
               </Link>
               <Link
                 href="/admin/chats"

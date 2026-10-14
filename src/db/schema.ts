@@ -402,12 +402,56 @@ export const messages = pgTable(
     cacheReadTokens: integer("cache_read_tokens"),
     cacheWriteTokens: integer("cache_write_tokens"),
     costUsd: doublePrecision("cost_usd"),
+    // live-data lookups the assistant made through integrations this turn —
+    // the audit trail of what was queried on whose behalf
+    toolCalls: jsonb("tool_calls").$type<MessageToolCall[]>(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (t) => [index("message_conversation_idx").on(t.conversationId, t.seq)],
 );
+
+export type MessageToolCall = {
+  integration: string;
+  tool: string;
+  input: unknown;
+  ok: boolean;
+  /** row count (SQL) or a short result summary */
+  summary: string;
+  ms?: number;
+};
+
+// External data sources the team chat can use (never anonymous visitors):
+// a read-only Postgres connection run by our own `query_<name>` tool, or a
+// remote MCP server attached through the Claude API's MCP connector. The
+// secret (connection string / bearer token) is AES-GCM encrypted at rest.
+export const integrations = pgTable("integration", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // machine name: tool/server identifier the model sees (a-z, 0-9, _)
+  name: text("name").notNull().unique(),
+  kind: text("kind", { enum: ["postgres", "mcp"] }).notNull(),
+  // what lives here and when to use it — shown to the model
+  description: text("description").notNull().default(""),
+  // MCP server URL (null for postgres)
+  url: text("url"),
+  secretEnc: text("secret_enc").notNull(),
+  // MCP tools the model may call; empty → every tool the server exposes
+  allowedTools: jsonb("allowed_tools").$type<string[]>().notNull().default([]),
+  enabled: boolean("enabled").notNull().default(true),
+  createdBy: text("created_by").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+});
+
+export type Integration = typeof integrations.$inferSelect;
 
 export type MessageSource = {
   n: number;

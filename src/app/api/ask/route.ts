@@ -27,6 +27,12 @@ import {
   type AskSource,
 } from "@/lib/ask-prompt";
 import { costOfUsage, effectiveCorpusCharBudget } from "@/lib/ask-models";
+import { buildChatToolkit, mcpCallsFromContent } from "@/server/chat-tools";
+import {
+  loadChatIntegrations,
+  markIntegrationsUsed,
+} from "@/server/integrations";
+import type { MessageToolCall } from "@/db/schema";
 import {
   checkRateLimit,
   rateLimitedResponse,
@@ -34,19 +40,25 @@ import {
 } from "@/server/rate-limit";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// live-data lookups add model round-trips, so allow more than a plain answer
+export const maxDuration = 120;
 
 // Retrieval budget per answer. File chunks get their own reserved slots so a
 // large reference file (e.g. an API spec split into many chunks) is never
 // squeezed out by page hits; pages likewise keep a floor.
 const PAGE_SLOTS = 4;
 const FILE_CHUNK_SLOTS = 8;
+// Cap on model round-trips per answer when live-data tools are in play
+// (schema lookup → query → refine is typically 2–4).
+const MAX_TOOL_STEPS = 8;
 
 /**
  * "Ask the docs": retrieval-grounded Q&A over published pages. Signed-in
  * team members transparently get internal pages in retrieval; anonymous
- * visitors get public pages only. Streams SSE: {type:"delta"} text chunks,
- * one {type:"sources"} event, then [DONE].
+ * visitors get public pages only. Team members also get the enabled
+ * integrations (read-only SQL, MCP servers) as tools. Streams SSE:
+ * {type:"delta"} text chunks, {type:"status"} while a tool runs, one
+ * {type:"sources"} event, then [DONE].
  */
 export async function POST(request: Request) {
   const { apiKey, enabled, model, effort, corpusTokenBudget } =
@@ -201,15 +213,21 @@ export async function POST(request: Request) {
   const systemPrompt = buildAskPrompt(sources, {
     maxSourceChars: wholeCorpus ? Infinity : undefined,
   });
-  const system = wholeCorpus
-    ? [
-        {
-          type: "text" as const,
-          text: systemPrompt,
-          cache_control: { type: "ephemeral" as const, ttl: "1h" as const },
-        },
-      ]
-    : systemPrompt;
+  // Live data sources are for the signed-in team only — never anonymous.
+  const toolkit = includeInternal
+    ? buildChatToolkit(await loadChatIntegrations(db))
+    : null;
+  const system = [
+    {
+      type: "text" as const,
+      text: systemPrompt,
+      ...(wholeCorpus
+        ? { cache_control: { type: "ephemeral" as const, ttl: "1h" as const } }
+        : {}),
+    },
+    // after the cached corpus block so it never invalidates that prefix
+    ...(toolkit ? [{ type: "text" as const, text: toolkit.promptSection }] : []),
+  ];
 
   const client = new Anthropic({ apiKey });
   const encoder = new TextEncoder();
@@ -255,45 +273,107 @@ export async function POST(request: Request) {
       let usage:
         | { input: number; output: number; cacheRead: number; cacheWrite: number }
         | undefined;
+      const toolCalls: MessageToolCall[] = [];
+      const usedIntegrations = new Set<string>();
       try {
-        const messageStream = client.messages.stream({
-          model: model.id,
-          // Adaptive thinking spends part of the budget on reasoning, so give
-          // the answer headroom; without thinking a short chat reply is plenty.
-          max_tokens: model.adaptiveThinking ? 4096 : 1024,
-          // Adaptive thinking lifts answer quality on harder questions; the
-          // admin-configured effort tunes how much it reasons. Haiku 4.5
-          // doesn't support these params (they'd 400), so it runs without.
-          ...(model.adaptiveThinking
-            ? {
-                thinking: { type: "adaptive" as const },
-                output_config: { effort },
-              }
-            : {}),
-          system,
-          messages: [
-            ...trimHistory(priorHistory),
-            { role: "user", content: question },
-          ],
-        });
-        for await (const event of messageStream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            answer += event.delta.text;
-            send(controller, { type: "delta", text: event.delta.text });
-          }
-        }
-        // Capture token usage for cost accounting (input, output, and the
-        // cache read/write that dominate whole-corpus cost).
-        const u = (await messageStream.finalMessage()).usage;
-        usage = {
-          input: u.input_tokens ?? 0,
-          output: u.output_tokens ?? 0,
-          cacheRead: u.cache_read_input_tokens ?? 0,
-          cacheWrite: u.cache_creation_input_tokens ?? 0,
+        const convo: Anthropic.Beta.Messages.BetaMessageParam[] = [
+          ...trimHistory(priorHistory),
+          { role: "user", content: question },
+        ];
+        const addUsage = (u: Anthropic.Beta.Messages.BetaUsage) => {
+          usage ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+          usage.input += u.input_tokens ?? 0;
+          usage.output += u.output_tokens ?? 0;
+          usage.cacheRead += u.cache_read_input_tokens ?? 0;
+          usage.cacheWrite += u.cache_creation_input_tokens ?? 0;
         };
+        for (let step = 0; ; step++) {
+          // keep text from successive round-trips from running together
+          if (answer !== "" && !/\s$/.test(answer)) {
+            answer += "\n\n";
+            send(controller, { type: "delta", text: "\n\n" });
+          }
+          const messageStream = client.beta.messages.stream({
+            model: model.id,
+            // Adaptive thinking spends part of the budget on reasoning, so give
+            // the answer headroom; without thinking a short chat reply is
+            // plenty — unless tools are in play, whose results get summarized.
+            max_tokens: model.adaptiveThinking ? (toolkit ? 8192 : 4096) : toolkit ? 2048 : 1024,
+            // Adaptive thinking lifts answer quality on harder questions; the
+            // admin-configured effort tunes how much it reasons. Haiku 4.5
+            // doesn't support these params (they'd 400), so it runs without.
+            ...(model.adaptiveThinking
+              ? {
+                  thinking: { type: "adaptive" as const },
+                  output_config: { effort },
+                }
+              : {}),
+            ...(toolkit
+              ? {
+                  tools: toolkit.tools,
+                  ...(toolkit.mcpServers.length > 0
+                    ? { mcp_servers: toolkit.mcpServers }
+                    : {}),
+                  ...(toolkit.betas.length > 0 ? { betas: toolkit.betas } : {}),
+                }
+              : {}),
+            system,
+            messages: convo,
+          });
+          for await (const event of messageStream) {
+            if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "text_delta"
+            ) {
+              answer += event.delta.text;
+              send(controller, { type: "delta", text: event.delta.text });
+            } else if (
+              event.type === "content_block_start" &&
+              event.content_block.type === "mcp_tool_use"
+            ) {
+              send(controller, {
+                type: "status",
+                text: `Checking ${event.content_block.server_name}…`,
+              });
+            }
+          }
+          // Capture token usage for cost accounting (input, output, and the
+          // cache read/write that dominate whole-corpus cost), summed across
+          // tool round-trips.
+          const final = await messageStream.finalMessage();
+          addUsage(final.usage);
+          toolCalls.push(...mcpCallsFromContent(final.content));
+
+          if (
+            toolkit &&
+            (final.stop_reason === "tool_use" || final.stop_reason === "pause_turn") &&
+            step < MAX_TOOL_STEPS
+          ) {
+            convo.push({ role: "assistant", content: final.content });
+            if (final.stop_reason === "pause_turn") continue;
+            const uses = final.content.filter(
+              (b): b is Anthropic.Beta.Messages.BetaToolUseBlock =>
+                b.type === "tool_use",
+            );
+            for (const u of uses) {
+              send(controller, { type: "status", text: toolkit.describe(u.name) });
+            }
+            const results = await Promise.all(uses.map((u) => toolkit.execute(u)));
+            for (const r of results) {
+              toolCalls.push(r.call);
+              if (r.integrationId) usedIntegrations.add(r.integrationId);
+            }
+            convo.push({ role: "user", content: results.map((r) => r.result) });
+            continue;
+          }
+          if (final.stop_reason === "tool_use" && answer.trim() === "") {
+            const note =
+              "I couldn't finish looking that up in time — try asking a narrower question.";
+            answer += note;
+            send(controller, { type: "delta", text: note });
+          }
+          break;
+        }
         // Show only the sources the model actually cited — in whole-corpus mode
         // every page is supplied, so surfacing them all would be noise.
         const cited = citedSourceNumbers(answer);
@@ -301,6 +381,7 @@ export async function POST(request: Request) {
         send(controller, { type: "sources", sources: citedSources });
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (e) {
+        console.error("Ask AI answer failed", e);
         send(controller, {
           type: "error",
           message:
@@ -320,8 +401,10 @@ export async function POST(request: Request) {
             sources: sourceRefs.filter((s) => cited.has(s.n)),
             usage,
             costUsd: usage ? costOfUsage(model, usage) : undefined,
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           }).catch(() => {});
         }
+        await markIntegrationsUsed(db, [...usedIntegrations]).catch(() => {});
         controller.close();
       }
     },

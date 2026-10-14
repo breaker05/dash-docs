@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Paperclip } from "lucide-react";
+import { ArrowLeft, Database, Paperclip } from "lucide-react";
 import { db } from "@/db";
 import { requireUser } from "@/server/auth-guards";
 import { getConversation } from "@/server/conversations";
@@ -98,6 +98,36 @@ export default async function ChatDetailPage({
                 : "rounded-xl border px-3.5 py-2.5",
             )}
           >
+            {m.toolCalls && m.toolCalls.length > 0 && (
+              <details className="mb-2.5 rounded-lg border bg-muted/30 text-xs">
+                <summary className="flex cursor-pointer items-center gap-1.5 px-2.5 py-1.5 text-muted-foreground">
+                  <Database className="size-3.5" /> {m.toolCalls.length} live-data{" "}
+                  {m.toolCalls.length === 1 ? "lookup" : "lookups"}
+                </summary>
+                <ul className="divide-y border-t">
+                  {m.toolCalls.map((c, i) => (
+                    <li key={i} className="space-y-1 px-2.5 py-2">
+                      <p className="flex flex-wrap items-center gap-x-2 text-muted-foreground">
+                        <span className="font-mono font-medium text-foreground">
+                          {c.integration} · {c.tool}
+                        </span>
+                        <span className={c.ok ? "" : "text-destructive"}>
+                          {c.summary}
+                        </span>
+                        {c.ms != null && <span>{c.ms} ms</span>}
+                      </p>
+                      <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-background px-2 py-1.5 font-mono text-[0.7rem]">
+                        {c.input &&
+                        typeof c.input === "object" &&
+                        "sql" in c.input
+                          ? String((c.input as { sql: unknown }).sql)
+                          : JSON.stringify(c.input, null, 2)}
+                      </pre>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
             {m.role === "assistant" ? (
               <AnswerMarkdown text={m.content} />
             ) : (

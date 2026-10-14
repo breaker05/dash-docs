@@ -7,6 +7,7 @@ import {
   type Conversation,
   type Message,
   type MessageSource,
+  type MessageToolCall,
 } from "@/db/schema";
 
 const TITLE_MAX = 80;
@@ -58,6 +59,8 @@ export async function addMessage(
       cacheWrite: number;
     };
     costUsd?: number;
+    /** live-data lookups made through integrations this turn */
+    toolCalls?: MessageToolCall[];
   },
 ): Promise<void> {
   await db.insert(messages).values({
@@ -70,6 +73,7 @@ export async function addMessage(
     cacheReadTokens: opts.usage?.cacheRead ?? null,
     cacheWriteTokens: opts.usage?.cacheWrite ?? null,
     costUsd: opts.costUsd ?? null,
+    toolCalls: opts.toolCalls ?? null,
   });
   await db
     .update(conversations)
