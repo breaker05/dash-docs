@@ -51,6 +51,9 @@ const FILE_CHUNK_SLOTS = 8;
 // Cap on model round-trips per answer when live-data tools are in play
 // (schema lookup → query → refine is typically 2–4).
 const MAX_TOOL_STEPS = 8;
+// Lets the API re-run a safety-declined answer on the model Anthropic
+// recommends for that decline category, inside the same request.
+const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 
 /**
  * "Ask the docs": retrieval-grounded Q&A over published pages. Signed-in
@@ -273,6 +276,9 @@ export async function POST(request: Request) {
       let usage:
         | { input: number; output: number; cacheRead: number; cacheWrite: number }
         | undefined;
+      // priced per request: the long-prompt rate card and a fallback model's
+      // rates both apply request by request, not to the summed usage
+      let costUsd = 0;
       const toolCalls: MessageToolCall[] = [];
       const usedIntegrations = new Set<string>();
       try {
@@ -280,13 +286,27 @@ export async function POST(request: Request) {
           ...trimHistory(priorHistory),
           { role: "user", content: question },
         ];
-        const addUsage = (u: Anthropic.Beta.Messages.BetaUsage) => {
+        const addUsage = (
+          u: Anthropic.Beta.Messages.BetaUsage,
+          servedBy: string,
+        ) => {
+          const step = {
+            input: u.input_tokens ?? 0,
+            output: u.output_tokens ?? 0,
+            cacheRead: u.cache_read_input_tokens ?? 0,
+            cacheWrite: u.cache_creation_input_tokens ?? 0,
+          };
           usage ??= { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-          usage.input += u.input_tokens ?? 0;
-          usage.output += u.output_tokens ?? 0;
-          usage.cacheRead += u.cache_read_input_tokens ?? 0;
-          usage.cacheWrite += u.cache_creation_input_tokens ?? 0;
+          usage.input += step.input;
+          usage.output += step.output;
+          usage.cacheRead += step.cacheRead;
+          usage.cacheWrite += step.cacheWrite;
+          costUsd += costOfUsage(model, step, servedBy);
         };
+        const betas = [
+          ...(model.serverFallback ? [FALLBACK_BETA] : []),
+          ...(toolkit?.betas ?? []),
+        ];
         for (let step = 0; ; step++) {
           // keep text from successive round-trips from running together
           if (answer !== "" && !/\s$/.test(answer)) {
@@ -314,9 +334,10 @@ export async function POST(request: Request) {
                   ...(toolkit.mcpServers.length > 0
                     ? { mcp_servers: toolkit.mcpServers }
                     : {}),
-                  ...(toolkit.betas.length > 0 ? { betas: toolkit.betas } : {}),
                 }
               : {}),
+            ...(model.serverFallback ? { fallbacks: "default" as const } : {}),
+            ...(betas.length > 0 ? { betas } : {}),
             system,
             messages: convo,
           });
@@ -341,7 +362,8 @@ export async function POST(request: Request) {
           // cache read/write that dominate whole-corpus cost), summed across
           // tool round-trips.
           const final = await messageStream.finalMessage();
-          addUsage(final.usage);
+          // final.model names the fallback model when one took over
+          addUsage(final.usage, final.model);
           toolCalls.push(...mcpCallsFromContent(final.content));
 
           if (
@@ -365,6 +387,19 @@ export async function POST(request: Request) {
             }
             convo.push({ role: "user", content: results.map((r) => r.result) });
             continue;
+          }
+          if (final.stop_reason === "refusal") {
+            // declined by the safety classifiers (and by any fallback model)
+            console.warn(
+              "Ask AI answer declined",
+              final.stop_details?.category ?? "unknown",
+            );
+            const note =
+              answer.trim() === ""
+                ? "I can't help with that one — try rephrasing the question."
+                : "\n\n_(This answer was cut short — try rephrasing the question.)_";
+            answer += note;
+            send(controller, { type: "delta", text: note });
           }
           if (final.stop_reason === "tool_use" && answer.trim() === "") {
             const note =
@@ -400,7 +435,7 @@ export async function POST(request: Request) {
             content: answer,
             sources: sourceRefs.filter((s) => cited.has(s.n)),
             usage,
-            costUsd: usage ? costOfUsage(model, usage) : undefined,
+            costUsd: usage ? costUsd : undefined,
             toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
           }).catch(() => {});
         }
